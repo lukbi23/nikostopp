@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Funktion zur Anzeige der gespeicherten Daten
+// Funktion zur Anzeige der gespeicherten Daten mit Lösch-Button
     function showSuccessMessage(data) {
         onboardingCard.innerHTML = `
             <h2>Willkommen bei deinem Ausstieg!</h2>
@@ -45,7 +45,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 <li><strong>Gründe:</strong> ${escapeHtml(data.gruende)}</li>
             </ul>
             <p><em>Deine Einstellungen sind gesichert.</em></p>
+            <button id="resetBtn" style="background-color: #c62828; margin-top: 15px;">Daten zurücksetzen / Neu starten</button>
         `;
+
+        // Event-Listener für den Lösch-Button
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            if (confirm('Möchtest du deine gespeicherten Daten wirklich löschen und das Onboarding neu starten?')) {
+                localStorage.removeItem('nikotinstopp_user_data');
+                location.reload(); // Lädt die Seite neu, damit das Formular wieder erscheint
+            }
+        });
     }
 
     // Hilfsfunktion zum Schutz vor unerwünschtem Code (HTML-Escaping)
