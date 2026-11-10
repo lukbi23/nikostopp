@@ -22,15 +22,10 @@
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
         input, select, textarea {
             width: 100%;
             padding: 10px;
@@ -50,14 +45,60 @@
             font-weight: bold;
             cursor: pointer;
         }
-        button:hover {
-            background-color: #1b5e20;
+        button:hover { background-color: #1b5e20; }
+        .btn-danger {
+            background-color: #c62828;
+            margin-top: 15px;
+        }
+        .btn-danger:hover { background-color: #b71c1c; }
+
+        /* Dashboard & Tracker Stile */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        .stat-box {
+            background: #e8f5e9;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: #555;
+            margin-top: 2px;
+        }
+        .phase-badge {
+            display: inline-block;
+            background: #2c3e50;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .tip-box {
+            background: #e3f2fd;
+            border-left: 4px solid #1976d2;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.4;
         }
     </style>
 </head>
 <body>
     <h1>Nikotinstopp</h1>
 
+    <!-- Onboarding-Ansicht -->
     <div class="card" id="onboardingCard">
         <h2>Dein Ausstieg – Einstellungen</h2>
         <form id="onboardingForm">
@@ -93,6 +134,9 @@
             <button type="submit">Ausstieg starten</button>
         </form>
     </div>
+
+    <!-- Dashboard-Ansicht (wird dynamisch befüllt) -->
+    <div class="card" id="dashboardCard" style="display: none;"></div>
 
     <script src="app.js"></script>
     <script>
