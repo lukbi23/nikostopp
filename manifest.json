@@ -1,0 +1,9 @@
+{
+  "name": "Nikotinstopp App",
+  "short_name": "Nikotinstopp",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2c3e50",
+  "description": "Unterstützung beim Nikotinausstieg."
+}
