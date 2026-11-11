@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCancelTrigger = document.getElementById('btnCancelTrigger');
     const relapseOverlay = document.getElementById('relapseOverlay');
     const relapseModalContent = document.getElementById('relapseModalContent');
+    const helpOverlay = document.getElementById('helpOverlay');
+    const btnCloseHelp = document.getElementById('btnCloseHelp');
 
     let timerInterval = null;
 
@@ -148,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p><strong>Deine Motivation:</strong> "${escapeHtml(data.gruende)}"</p>
             </div>
 
+            <button id="btnOpenHelp" class="btn-help">📞 Beratung & Hilfsangebote</button>
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
 
@@ -164,6 +167,10 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerOverlay.style.display = 'flex';
         });
 
+        document.getElementById('btnOpenHelp').addEventListener('click', () => {
+            helpOverlay.style.display = 'flex';
+        });
+
         document.getElementById('sosBtn').addEventListener('click', () => startSosFlow(data));
         document.getElementById('resetBtn').addEventListener('click', () => {
             if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?')) {
@@ -173,7 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // RÜCKFALL-MODUS LOGIK
+    if (btnCloseHelp) {
+        btnCloseHelp.addEventListener('click', () => {
+            helpOverlay.style.display = 'none';
+        });
+    }
+
     function starteRueckfallModus(data, datumStr) {
         relapseOverlay.style.display = 'flex';
         relapseModalContent.innerHTML = `
@@ -202,14 +214,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btnFinishRelapse').addEventListener('click', () => {
             const ausloeser = document.getElementById('relapseTrigger').value;
 
-            // Ausrutscher auch im Trigger-Tagebuch erfassen
             data.triggers.push({
                 kategorie: `Ausrutscher: ${ausloeser}`,
                 notiz: 'Auslöser beim Ausrutscher reflektiert.',
                 datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
             });
 
-            // Check-in speichern
             speichereCheckIn(data, datumStr, 'slip');
             relapseOverlay.style.display = 'none';
         });
@@ -280,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3>2. Die Welle reiten & 10-Min-Timer</h3>
             <p>Ein Craving ist wie eine Welle: Es steigt an, erreicht einen Gipfel und baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab.</p>
             <div id="timerDisplay" class="timer-display">10:00</div>
-            <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten[cite: 1].</small></p>
+            <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten.</small></p>
             <button id="sosNext2">Weiter zur Ablenkung & Motivation</button>
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
@@ -316,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </blockquote>
             <p><strong>Schnelle Ablenkungs-Tipps:</strong></p>
             <ul style="text-align: left; font-size: 14px;">
-                <li>Trinke ein grosses Glas kaltes Wasser[cite: 1].</li>
+                <li>Trinke ein grosses Glas kaltes Wasser.</li>
                 <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft[cite: 1].</li>
                 <li>Rufe eine Person an oder lenke deine Hände ab[cite: 1].</li>
             </ul>

@@ -131,6 +131,8 @@
             max-width: 450px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
             text-align: center;
+            max-height: 85vh;
+            overflow-y: auto;
         }
         .timer-display {
             font-size: 36px;
@@ -181,6 +183,32 @@
             font-weight: bold;
             color: #00695c;
             margin-bottom: 4px;
+        }
+
+        /* Hilfe & Sicherheit Stile */
+        .btn-help {
+            background-color: #0288d1;
+            color: white;
+            margin-top: 10px;
+        }
+        .btn-help:hover { background-color: #01579b; }
+        .help-box {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 10px 0;
+            text-align: left;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .disclaimer-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+            text-align: left;
+            line-height: 1.4;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
         }
     </style>
 </head>
@@ -262,6 +290,37 @@
     <!-- Rückfall-Modus Modal Container -->
     <div id="relapseOverlay" class="modal-overlay" style="display: none;">
         <div class="modal-content" id="relapseModalContent"></div>
+    </div>
+
+    <!-- Hilfe & Sicherheit Modal Container -->
+    <div id="helpOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>📞 Beratung & Hilfsangebote</h3>
+            
+            <div class="help-box" style="border-left: 4px solid #0288d1;">
+                <strong>Rauchstopplinie Schweiz</strong>
+                <p style="margin: 4px 0;">Kostenlose telefonische Beratung (verdoppelt die Erfolgsquote):</p>
+                <a href="tel:0848000181" style="font-size: 16px; font-weight: bold; color: #0288d1; text-decoration: none;">📞 0848 000 181</a><br>
+                <small>Webseite: <a href="https://stopsmoking.ch" target="_blank" rel="noopener">stopsmoking.ch</a></small>
+            </div>
+
+            <div class="help-box" style="border-left: 4px solid #388e3c;">
+                <strong>Medikamentöse Unterstützung</strong>
+                <p style="margin: 4px 0;">Medikamentöse Unterstützung (z. B. Nikotinersatz) kann beim Ausstieg helfen. Bei Interesse berät dich deine Hausarztpraxis oder deine Apotheke.</p>
+            </div>
+
+            <div class="help-box" style="border-left: 4px solid #d32f2f; background: #ffebee;">
+                <strong>Krisenhinweis (Rund um die Uhr)</strong>
+                <p style="margin: 4px 0;">Falls du dich stark belastet fühlst oder Unterstützung in einer Krise brauchst:</p>
+                <a href="tel:143" style="font-size: 16px; font-weight: bold; color: #d32f2f; text-decoration: none;">📞 143 (Die Dargebotene Hand)</a>
+            </div>
+
+            <div class="disclaimer-text">
+                <strong>Rechtlicher Hinweis:</strong> Diese App ist keine medizinische Behandlung und ersetzt keine ärztliche oder fachliche Beratung. Es werden keine Heilversprechen abgegeben.
+            </div>
+
+            <button type="button" id="btnCloseHelp" class="btn-secondary" style="margin-top: 15px;">Schliessen</button>
+        </div>
     </div>
 
     <script src="app.js"></script>
