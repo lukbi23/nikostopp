@@ -159,18 +159,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const unkonsumiertText = getUnkonsumiertLabel(data.nikotinForm);
         const actAbsolviertCount = data.actCompleted.length;
 
-        // Commitment Status Text aufbauen
         let commitmentButtonText = '🤝 Commitment-Modus einrichten';
         let commitmentInfoHTML = '';
 
         if (data.commitment && data.commitment.active) {
             const c = data.commitment;
-            commitmentButtonText = `🤝 Commitment-Vertrag (${c.personName})`;
+            commitmentButtonText = `🤝 Commitment-Vertrag (${escapeHtml(c.personName)})`;
             commitmentInfoHTML = `
                 <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; text-align: left;">
                     <strong>Vertrauensperson:</strong> ${escapeHtml(c.personName)}<br>
-                    <strong>Einsatz:</strong> ${c.betrag.toFixed(2)} CHF (${c.rhythmus}) | <strong>Rückzahlung an Checkpoints:</strong> ${c.prozent}%<br>
-                    <small>Regel A aktiv: Kein Geldverlust bei Ausrutschern.</small>
+                    <strong>Täglicher Einsatz:</strong> ${c.betrag.toFixed(2)} CHF / Tag (${(c.betrag * 7).toFixed(2)} CHF / Woche)<br>
+                    <strong>Rückzahlung an Checkpoints:</strong> ${c.prozent}%<br>
+                    <small>Regel A (Mild): Kein Geldverlust bei Ausrutschern.</small>
                 </div>
             `;
         }
@@ -273,50 +273,57 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderCommitmentForm(data) {
-        const standardBetrag = data.tagesKosten ? data.tagesKosten.toFixed(2) : "8.00";
+        const tagesBetrag = data.tagesKosten ? data.tagesKosten : 8.00;
+        const wochenBetrag = (tagesBetrag * 7).toFixed(2);
+        const chk1Einzahlung = (tagesBetrag * 7).toFixed(2);
+        const chk1Rueck = (tagesBetrag * 7 * 0.5).toFixed(2);
 
         commitmentModalContent.innerHTML = `
-            <h3>🤝 Commitment-Vertrag</h3>
-            <p style="font-size: 13px; text-align: left; color: #555;">
-                Verbinde deinen Ausstieg mit einer finanziellen Vereinbarung. Zahle regelmässig den eingesparten Betrag an eine Vertrauensperson (z. B. auf ein Sparkonto).
-            </p>
+            <h3>🤝 Commitment-Vertrag (Einzahlungsvertrag)</h3>
+            
+            <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                <strong>Warum macht das Sinn? (Wissenschaftlicher Hintergrund)</strong><br>
+                Reine Willenskraft ist oft die schwächste Strategie. Studien (u.a. New England Journal of Medicine & Cochrane) zeigen, dass Selbstverpflichtungen mit finanziellem Einsatz die Erfolgsquote <strong>mehr als verdoppeln</strong>. Die soziale Verbindlichkeit gegenüber einer Vertrauensperson schafft eine wirksame Hürde gegen spontane Cravings.
+            </div>
 
-            <form id="commitmentForm" style="text-align: left; margin-top: 15px;">
+            <form id="commitmentForm" style="text-align: left;">
                 <div class="form-group">
-                    <label for="comName">Name der Vertrauensperson:</label>
-                    <input type="text" id="comName" placeholder="z. B. Anna" required>
+                    <label for="comName">Name deiner Vertrauensperson:</label>
+                    <input type="text" id="comName" placeholder="z. B. Anna (Freundin, Partner, Kollege)" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="comBetrag">Einsatzbetrag (in CHF):</label>
-                    <input type="number" id="comBetrag" step="0.50" value="${standardBetrag}" required>
+                    <label for="comBetrag">Einsatzbetrag pro Tag (in CHF):</label>
+                    <input type="number" id="comBetrag" step="0.50" value="${tagesBetrag.toFixed(2)}" required>
+                    <small style="color: #666;">Basiert auf deinen bisherigen Tageskosten.</small>
                 </div>
 
-                <div class="form-group">
-                    <label for="comRhythmus">Einzahlungs-Rhythmus:</label>
-                    <select id="comRhythmus" required>
-                        <option value="täglich">Täglich</option>
-                        <option value="wöchentlich">Wöchentlich</option>
-                    </select>
+                <div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
+                    <strong>💡 Beispielrechnung & Zeiträume:</strong><br>
+                    - Täglicher Betrag: <span id="calcTag">${tagesBetrag.toFixed(2)}</span> CHF (${wochenBetrag} CHF / Woche)<br>
+                    - <strong>Checkpoint Woche 1 (Tag 7):</strong> ${chk1Einzahlung} CHF eingezahlt ➔ <strong>${chk1Rueck} CHF zurück</strong> (50%), der Rest bleibt bis zum Ziel gesperrt.<br>
+                    - <strong>Ziel nach 6 Monaten:</strong> 100% aller gesperrten Reste fliessen an dich zurück. Du verlierst bei Erfolg 0 CHF!
                 </div>
 
-                <div class="form-group">
-                    <label for="comProzent">Rückzahlung an Checkpoints (%):</label>
-                    <select id="comProzent" required>
-                        <option value="50">50 % (Vorschlag)</option>
-                        <option value="25">25 %</option>
-                        <option value="75">75 %</option>
-                    </select>
-                </div>
-
-                <div class="tip-box" style="margin-bottom: 15px; font-size: 12px; background: #fff3e0; border-left-color: #f57c00;">
-                    <strong>Aktive Regel (Variante A - Mild):</strong> Bei einem Ausrutscher verfällt kein Geld. Der laufende Abschnitt startet neu (Preis ist Zeit).
+                <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
+                    <strong>🛡️ Regeln bei Ausrutschern (Variante A – Mild):</strong><br>
+                    - <strong>Kein Geldverlust:</strong> Bei einem Ausrutscher (z. B. an Tag 5) verfällt dein Geld nicht! Es bleibt sicher auf dem Sparkonto.<br>
+                    - <strong>Zeitlicher Reset:</strong> Lediglich die Zählung für den laufenden Checkpoint (z. B. Woche 1) startet von vorn. Das schützt dich vor dem "Jetzt ist auch egal"-Effekt.
                 </div>
 
                 <button type="submit" style="background-color: #f57c00;">Vertrag erstellen & aktivieren</button>
                 <button type="button" id="btnCloseCommitment" class="btn-secondary">Abbrechen</button>
             </form>
         `;
+
+        // Live-Update der Beispielrechnung bei Betragsänderung
+        const inputBetrag = document.getElementById('comBetrag');
+        if (inputBetrag) {
+            inputBetrag.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value) || 0;
+                document.getElementById('calcTag').textContent = val.toFixed(2);
+            });
+        }
 
         document.getElementById('commitmentForm').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -325,8 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 active: true,
                 personName: document.getElementById('comName').value,
                 betrag: parseFloat(document.getElementById('comBetrag').value),
-                rhythmus: document.getElementById('comRhythmus').value,
-                prozent: parseInt(document.getElementById('comProzent').value, 10),
+                prozent: 50,
                 startDatum: new Date().toLocaleDateString('de-CH')
             };
 
@@ -342,20 +348,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderCommitmentVertragView(data) {
         const c = data.commitment;
-        const verfahrensText = `Vereinbarung über den Nikotinausstieg:
+        const tag = c.betrag.toFixed(2);
+        const woche = (c.betrag * 7).toFixed(2);
 
-Ich zahle ab dem ${c.startDatum} ${c.rhythmus} einen Betrag von ${c.betrag.toFixed(2)} CHF an ${c.personName}. 
+        const verfahrensText = `VEREINBARUNG ZUM NIKOTINAUSSTIEG (COMMITMENT-VERTRAG)
 
-Bei den Checkpoints (Woche 1, Woche 4, Monat 3) erhalte ich jeweils ${c.prozent}% des in diesem Abschnitt eingezahlten Betrags zurück. Erreiche ich mein Ziel nach 6 Monaten, erhalte ich den gesamten restlichen Betrag zurück (100%)[cite: 1].
+1. VERTRAGSPARTNER
+Diese Vereinbarung wird geschlossen zwischen mir und meiner Vertrauensperson ${c.personName}.
 
-Bei einem Ausrutscher gilt Regel A: Der laufende Abschnitt startet neu. Es geht kein Geld verloren[cite: 1]. Wir sprechen uns regelmässig kurz über meinen Stand[cite: 1].`;
+2. EINSATZBETRAG & ANSPARUNG
+Ich überweise / übergebe ab dem ${c.startDatum} täglich ${tag} CHF (bzw. ${woche} CHF pro Woche) an ${c.personName}. Das Geld wird separat verwahrt.
+
+3. CHECKPOINTS & RÜCKZAHLUNGEN
+Bei Erreichen folgender Meilensteine erhalte ich Teilauszahlungen (50% des jeweiligen Zeitraums):
+- Woche 1 (Tag 7): 50% Rückzahlung des Wochenbetrags.
+- Woche 4 (Tag 28): 50% Rückzahlung des Monatsbetrags.
+- Monat 3 (Tag 90): 50% Rückzahlung des Quartalsbetrags.
+- Endziel (Monat 6): Auszahlung ALLER verbliebenen gesperrten Reste (100% Gesamtrückzahlung).
+
+4. REGELUNG BEI AUSRUTSCHERN
+Bei einem Ausrutscher verfällt kein Geld. Das bisher eingezahlte Guthaben bleibt sicher im Topf. Lediglich die Zeitfrist des aktuellen Checkpoints startet neu.
+
+Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
 
         commitmentModalContent.innerHTML = `
             <h3>📄 Dein Commitment-Vertrag</h3>
             
-            <textarea id="vertragText" rows="10" readonly style="font-family: monospace; font-size: 13px; background: #f9f9f9; padding: 10px;">${verfahrensText}</textarea>
+            <textarea id="vertragText" rows="12" readonly style="font-family: monospace; font-size: 12px; background: #f9f9f9; padding: 10px; width: 100%; box-sizing: border-box;">${verfahrensText}</textarea>
 
-            <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Text in Zwischenablage kopieren</button>
+            <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Text für WhatsApp / E-Mail kopieren</button>
             <button id="btnDeactivateCommitment" class="btn-danger" style="margin-top: 8px;">Vertrag auflösen</button>
             <button type="button" id="btnCloseCommitmentView" class="btn-secondary" style="margin-top: 8px;">Schliessen</button>
         `;
@@ -364,7 +385,7 @@ Bei einem Ausrutscher gilt Regel A: Der laufende Abschnitt startet neu. Es geht 
             const copyText = document.getElementById('vertragText');
             copyText.select();
             navigator.clipboard.writeText(copyText.value);
-            alert('Vertragstext kopiert! Du kannst ihn jetzt per WhatsApp oder E-Mail senden.');
+            alert('Vertragstext kopiert! Du kannst ihn jetzt an deine Vertrauensperson senden.');
         });
 
         document.getElementById('btnDeactivateCommitment').addEventListener('click', () => {
