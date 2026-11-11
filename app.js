@@ -13,16 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCloseHelp = document.getElementById('btnCloseHelp');
     const actOverlay = document.getElementById('actOverlay');
     const actModalContent = document.getElementById('actModalContent');
+    const commitmentOverlay = document.getElementById('commitmentOverlay');
+    const commitmentModalContent = document.getElementById('commitmentModalContent');
 
     let timerInterval = null;
 
-    // 4 EVIDENZBASIERTE ACT-LEKTIONEN
     const actLektionenData = [
         {
             id: 'akt1',
             titel: '1. Akzeptanz statt Kampf',
             kategorie: 'Akzeptanz',
-            inhalt: 'Suchtdrang fühlt sich unangenehm an. Versuchst du ihn krampfhaft zu unterdrücken, wird er meist stärker. Statt dagegen anzukämpfen, erlaube dem Gefühl einfach da zu sein – wie eine Welle im Meer, die kommt, ihren Höhepunkt erreicht und wieder abflacht.',
+            inhalt: 'Suchtdrang fühlt sich unangenehm an. Versuchst du ihn krampfhaft zu unterdrücken, wird er meist stetig stärker. Erlaube dem Gefühl einfach da zu sein – wie eine Welle im Meer, die kommt, ihren Höhepunkt erreicht und von selbst abflacht.',
             uebung: 'Sag dir bei jedem Drang gedanklich: "Ich spüre einen Drang. Das ist okay, er geht von alleine wieder."'
         },
         {
@@ -48,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     ];
 
-    // Gespeicherte Daten beim Laden prüfen
     const savedData = localStorage.getItem('nikotinstopp_user_data');
     if (savedData) {
         showDashboard(JSON.parse(savedData));
@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 checkIns: [],
                 triggers: [],
                 actCompleted: [],
+                commitment: null,
                 erstelltAm: new Date().toISOString()
             };
 
@@ -158,6 +159,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const unkonsumiertText = getUnkonsumiertLabel(data.nikotinForm);
         const actAbsolviertCount = data.actCompleted.length;
 
+        // Commitment Status Text aufbauen
+        let commitmentButtonText = '🤝 Commitment-Modus einrichten';
+        let commitmentInfoHTML = '';
+
+        if (data.commitment && data.commitment.active) {
+            const c = data.commitment;
+            commitmentButtonText = `🤝 Commitment-Vertrag (${c.personName})`;
+            commitmentInfoHTML = `
+                <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; text-align: left;">
+                    <strong>Vertrauensperson:</strong> ${escapeHtml(c.personName)}<br>
+                    <strong>Einsatz:</strong> ${c.betrag.toFixed(2)} CHF (${c.rhythmus}) | <strong>Rückzahlung an Checkpoints:</strong> ${c.prozent}%<br>
+                    <small>Regel A aktiv: Kein Geldverlust bei Ausrutschern.</small>
+                </div>
+            `;
+        }
+
         dashboardCard.innerHTML = `
             ${checkInHTML}
 
@@ -202,6 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p><strong>Deine Motivation:</strong> "${escapeHtml(data.gruende)}"</p>
             </div>
 
+            <button id="btnOpenCommitment" class="btn-commitment">${commitmentButtonText}</button>
+            ${commitmentInfoHTML}
+
             <button id="btnOpenAct" class="btn-act">🧠 ACT-Lektionen (${actAbsolviertCount}/4 absolviert)</button>
             <button id="btnOpenHelp" class="btn-help">📞 Beratung & Hilfsangebote</button>
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
@@ -224,6 +244,10 @@ document.addEventListener('DOMContentLoaded', () => {
             starteActModus(data);
         });
 
+        document.getElementById('btnOpenCommitment').addEventListener('click', () => {
+            starteCommitmentModus(data);
+        });
+
         document.getElementById('btnOpenHelp').addEventListener('click', () => {
             helpOverlay.style.display = 'flex';
         });
@@ -234,6 +258,126 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem('nikotinstopp_user_data');
                 location.reload();
             }
+        });
+    }
+
+    // COMMITMENT-MODUS LOGIK
+    function starteCommitmentModus(data) {
+        commitmentOverlay.style.display = 'flex';
+
+        if (data.commitment && data.commitment.active) {
+            renderCommitmentVertragView(data);
+        } else {
+            renderCommitmentForm(data);
+        }
+    }
+
+    function renderCommitmentForm(data) {
+        const standardBetrag = data.tagesKosten ? data.tagesKosten.toFixed(2) : "8.00";
+
+        commitmentModalContent.innerHTML = `
+            <h3>🤝 Commitment-Vertrag</h3>
+            <p style="font-size: 13px; text-align: left; color: #555;">
+                Verbinde deinen Ausstieg mit einer finanziellen Vereinbarung. Zahle regelmässig den eingesparten Betrag an eine Vertrauensperson (z. B. auf ein Sparkonto).
+            </p>
+
+            <form id="commitmentForm" style="text-align: left; margin-top: 15px;">
+                <div class="form-group">
+                    <label for="comName">Name der Vertrauensperson:</label>
+                    <input type="text" id="comName" placeholder="z. B. Anna" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="comBetrag">Einsatzbetrag (in CHF):</label>
+                    <input type="number" id="comBetrag" step="0.50" value="${standardBetrag}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="comRhythmus">Einzahlungs-Rhythmus:</label>
+                    <select id="comRhythmus" required>
+                        <option value="täglich">Täglich</option>
+                        <option value="wöchentlich">Wöchentlich</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="comProzent">Rückzahlung an Checkpoints (%):</label>
+                    <select id="comProzent" required>
+                        <option value="50">50 % (Vorschlag)</option>
+                        <option value="25">25 %</option>
+                        <option value="75">75 %</option>
+                    </select>
+                </div>
+
+                <div class="tip-box" style="margin-bottom: 15px; font-size: 12px; background: #fff3e0; border-left-color: #f57c00;">
+                    <strong>Aktive Regel (Variante A - Mild):</strong> Bei einem Ausrutscher verfällt kein Geld. Der laufende Abschnitt startet neu (Preis ist Zeit).
+                </div>
+
+                <button type="submit" style="background-color: #f57c00;">Vertrag erstellen & aktivieren</button>
+                <button type="button" id="btnCloseCommitment" class="btn-secondary">Abbrechen</button>
+            </form>
+        `;
+
+        document.getElementById('commitmentForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            data.commitment = {
+                active: true,
+                personName: document.getElementById('comName').value,
+                betrag: parseFloat(document.getElementById('comBetrag').value),
+                rhythmus: document.getElementById('comRhythmus').value,
+                prozent: parseInt(document.getElementById('comProzent').value, 10),
+                startDatum: new Date().toLocaleDateString('de-CH')
+            };
+
+            localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+            renderCommitmentVertragView(data);
+            showDashboard(data);
+        });
+
+        document.getElementById('btnCloseCommitment').addEventListener('click', () => {
+            commitmentOverlay.style.display = 'none';
+        });
+    }
+
+    function renderCommitmentVertragView(data) {
+        const c = data.commitment;
+        const verfahrensText = `Vereinbarung über den Nikotinausstieg:
+
+Ich zahle ab dem ${c.startDatum} ${c.rhythmus} einen Betrag von ${c.betrag.toFixed(2)} CHF an ${c.personName}. 
+
+Bei den Checkpoints (Woche 1, Woche 4, Monat 3) erhalte ich jeweils ${c.prozent}% des in diesem Abschnitt eingezahlten Betrags zurück. Erreiche ich mein Ziel nach 6 Monaten, erhalte ich den gesamten restlichen Betrag zurück (100%)[cite: 1].
+
+Bei einem Ausrutscher gilt Regel A: Der laufende Abschnitt startet neu. Es geht kein Geld verloren[cite: 1]. Wir sprechen uns regelmässig kurz über meinen Stand[cite: 1].`;
+
+        commitmentModalContent.innerHTML = `
+            <h3>📄 Dein Commitment-Vertrag</h3>
+            
+            <textarea id="vertragText" rows="10" readonly style="font-family: monospace; font-size: 13px; background: #f9f9f9; padding: 10px;">${verfahrensText}</textarea>
+
+            <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Text in Zwischenablage kopieren</button>
+            <button id="btnDeactivateCommitment" class="btn-danger" style="margin-top: 8px;">Vertrag auflösen</button>
+            <button type="button" id="btnCloseCommitmentView" class="btn-secondary" style="margin-top: 8px;">Schliessen</button>
+        `;
+
+        document.getElementById('btnCopyVertrag').addEventListener('click', () => {
+            const copyText = document.getElementById('vertragText');
+            copyText.select();
+            navigator.clipboard.writeText(copyText.value);
+            alert('Vertragstext kopiert! Du kannst ihn jetzt per WhatsApp oder E-Mail senden.');
+        });
+
+        document.getElementById('btnDeactivateCommitment').addEventListener('click', () => {
+            if (confirm('Möchtest du den Commitment-Vertrag wirklich auflösen?')) {
+                data.commitment = null;
+                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+                commitmentOverlay.style.display = 'none';
+                showDashboard(data);
+            }
+        });
+
+        document.getElementById('btnCloseCommitmentView').addEventListener('click', () => {
+            commitmentOverlay.style.display = 'none';
         });
     }
 
@@ -272,7 +416,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <button type="button" id="btnCloseAct" class="btn-secondary" style="margin-top: 10px;">Schliessen</button>
         `;
 
-        // Click-Listener für die einzelnen Lektionen
         document.querySelectorAll('.act-card').forEach(card => {
             card.addEventListener('click', () => {
                 const id = card.getAttribute('data-id');
@@ -312,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.actCompleted.push(lektion.id);
                 localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
                 renderActLesson(data, lektion);
-                showDashboard(data); // Zähler im Dashboard aktualisieren
+                showDashboard(data);
             });
         }
 

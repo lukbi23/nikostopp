@@ -185,7 +185,7 @@
             margin-bottom: 4px;
         }
 
-        /* Hilfe & ACT Stile */
+        /* Buttons & Extras */
         .btn-help {
             background-color: #0288d1;
             color: white;
@@ -200,6 +200,13 @@
         }
         .btn-act:hover { background-color: #4a148c; }
 
+        .btn-commitment {
+            background-color: #f57c00;
+            color: white;
+            margin-top: 10px;
+        }
+        .btn-commitment:hover { background-color: #e65100; }
+
         .act-card {
             background: #f3e5f5;
             border-left: 4px solid #8e24aa;
@@ -209,9 +216,7 @@
             text-align: left;
             cursor: pointer;
         }
-        .act-card:hover {
-            background: #e1bee7;
-        }
+        .act-card:hover { background: #e1bee7; }
         .act-title {
             font-weight: bold;
             color: #4a148c;
@@ -328,6 +333,11 @@
     <!-- ACT-Lektionen Modal Container -->
     <div id="actOverlay" class="modal-overlay" style="display: none;">
         <div class="modal-content" id="actModalContent"></div>
+    </div>
+
+    <!-- Commitment-Modus Modal Container -->
+    <div id="commitmentOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content" id="commitmentModalContent"></div>
     </div>
 
     <!-- Hilfe & Sicherheit Modal Container -->
