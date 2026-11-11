@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 stichtag: document.getElementById('stichtag').value,
                 gruende: document.getElementById('gruende').value,
                 cravingsBewaeltigt: 0,
+                checkIns: [], // Array für tägliche Status-Einträge
                 erstelltAm: new Date().toISOString()
             };
 
@@ -37,10 +38,10 @@ document.addEventListener('DOMContentLoaded', () => {
         onboardingCard.style.display = 'none';
         dashboardCard.style.display = 'block';
 
-        if (data.cravingsBewaeltigt === undefined) {
-            data.cravingsBewaeltigt = 0;
-        }
+        if (data.cravingsBewaeltigt === undefined) data.cravingsBewaeltigt = 0;
+        if (!data.checkIns) data.checkIns = [];
 
+        const heuteStr = new Date().toISOString().split('T')[0];
         const heute = new Date();
         heute.setHours(0, 0, 0, 0);
 
@@ -55,7 +56,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const eingesparteEinheiten = tageRauchfrei * data.tagesMenge;
         const phaseInfo = getPhaseInfo(tageRauchfrei);
 
+        // Prüfen, ob für heute bereits ein Check-in vorliegt
+        const heuteCheckIn = data.checkIns.find(c => c.datum === heuteStr);
+
+        let checkInHTML = '';
+        if (!heuteCheckIn) {
+            checkInHTML = `
+                <div class="checkin-card" id="checkinCard">
+                    <div class="checkin-title">📅 Tages-Check-in für heute</div>
+                    <p style="font-size: 14px; margin: 0 0 10px 0;">Wie läuft dein Ausstieg heute?</p>
+                    <div class="checkin-buttons">
+                        <button id="btnCheckinClean" class="btn-success">✅ Frei geblieben</button>
+                        <button id="btnCheckinSlip" class="btn-warning">⚠️ Ausrutscher</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            const statusText = heuteCheckIn.status === 'clean' 
+                ? '✅ Heute frei geblieben! Super gemacht.' 
+                : '⚠️ Heute gab es einen Ausrutscher. Bleib trotzdem dran!';
+            checkInHTML = `
+                <div class="tip-box" style="margin-bottom: 20px; background: #e8f5e9; border-left-color: #2e7d32;">
+                    <strong>Tages-Check-in erledigt:</strong> ${statusText}
+                </div>
+            `;
+        }
+
         dashboardCard.innerHTML = `
+            ${checkInHTML}
+
             <button id="sosBtn" class="btn-sos">⚡ Craving SOS – Ich habe Suchtdrang!</button>
 
             <h2>Dein Fortschritt</h2>
@@ -92,12 +121,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
 
-        // Event-Listener für SOS-Button
-        document.getElementById('sosBtn').addEventListener('click', () => {
-            startSosFlow(data);
-        });
+        // Event-Listener für Check-in Buttons
+        if (!heuteCheckIn) {
+            document.getElementById('btnCheckinClean')?.addEventListener('click', () => {
+                speichereCheckIn(data, heuteStr, 'clean');
+            });
+            document.getElementById('btnCheckinSlip')?.addEventListener('click', () => {
+                speichereCheckIn(data, heuteStr, 'slip');
+            });
+        }
 
-        // Event-Listener für Reset-Button
+        // Event-Listener für SOS-Button & Reset-Button
+        document.getElementById('sosBtn').addEventListener('click', () => startSosFlow(data));
         document.getElementById('resetBtn').addEventListener('click', () => {
             if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?')) {
                 localStorage.removeItem('nikotinstopp_user_data');
@@ -106,13 +141,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS (ACT-basiert)
+    function speichereCheckIn(data, datum, status) {
+        data.checkIns.push({ datum: datum, status: status, zeitstempel: new Date().toISOString() });
+        localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+        showDashboard(data);
+    }
+
+    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS
     function startSosFlow(userData) {
         sosOverlay.style.display = 'flex';
         renderSosStep1(userData);
     }
 
-    // Schritt 1: Impuls benennen & Körper beobachten
     function renderSosStep1(userData) {
         sosModalContent.innerHTML = `
             <h3>1. Impuls benennen</h3>
@@ -129,9 +169,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
-    // Schritt 2: Atmen & Welle beobachten + 10-Minuten Timer
     function renderSosStep2(userData) {
-        let timeLeft = 600; // 10 Minuten in Sekunden
+        let timeLeft = 600;
 
         sosModalContent.innerHTML = `
             <h3>2. Die Welle reiten & 10-Min-Timer</h3>
@@ -164,7 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
-    // Schritt 3: Motivation & Ablenkungs-Tipps
     function renderSosStep3(userData) {
         sosModalContent.innerHTML = `
             <h3>3. Motivation & Handlung</h3>
@@ -182,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         document.getElementById('sosFinish').addEventListener('click', () => {
-            // Zähler erhöhen und im localStorage speichern
             userData.cravingsBewaeltigt = (userData.cravingsBewaeltigt || 0) + 1;
             localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
             closeSos();

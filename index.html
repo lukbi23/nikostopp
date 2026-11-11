@@ -143,6 +143,27 @@
             margin-top: 10px;
         }
         .btn-secondary:hover { background-color: #616161; }
+
+        /* Check-in Banner Stile */
+        .checkin-card {
+            background: #fff8e1;
+            border: 2px solid #ffa000;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .checkin-title {
+            font-weight: bold;
+            color: #f57c00;
+            margin-bottom: 8px;
+        }
+        .checkin-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn-success { background-color: #388e3c; }
+        .btn-warning { background-color: #f57c00; }
     </style>
 </head>
 <body>
@@ -190,9 +211,7 @@
 
     <!-- Craving-SOS Modal Container -->
     <div id="sosOverlay" class="modal-overlay" style="display: none;">
-        <div class="modal-content" id="sosModalContent">
-            <!-- Wird von app.js Schritt für Schritt befüllt -->
-        </div>
+        <div class="modal-content" id="sosModalContent"></div>
     </div>
 
     <script src="app.js"></script>
