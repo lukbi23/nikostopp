@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const dashboardCard = document.getElementById('dashboardCard');
     const sosOverlay = document.getElementById('sosOverlay');
     const sosModalContent = document.getElementById('sosModalContent');
+    const triggerOverlay = document.getElementById('triggerOverlay');
+    const triggerForm = document.getElementById('triggerForm');
+    const btnCancelTrigger = document.getElementById('btnCancelTrigger');
 
     let timerInterval = null;
 
@@ -24,7 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 stichtag: document.getElementById('stichtag').value,
                 gruende: document.getElementById('gruende').value,
                 cravingsBewaeltigt: 0,
-                checkIns: [], // Array für tägliche Status-Einträge
+                checkIns: [],
+                triggers: [], // Array für Trigger-Tagebucheinträge
                 erstelltAm: new Date().toISOString()
             };
 
@@ -40,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.cravingsBewaeltigt === undefined) data.cravingsBewaeltigt = 0;
         if (!data.checkIns) data.checkIns = [];
+        if (!data.triggers) data.triggers = [];
 
         const heuteStr = new Date().toISOString().split('T')[0];
         const heute = new Date();
@@ -56,7 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const eingesparteEinheiten = tageRauchfrei * data.tagesMenge;
         const phaseInfo = getPhaseInfo(tageRauchfrei);
 
-        // Prüfen, ob für heute bereits ein Check-in vorliegt
         const heuteCheckIn = data.checkIns.find(c => c.datum === heuteStr);
 
         let checkInHTML = '';
@@ -80,6 +84,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     <strong>Tages-Check-in erledigt:</strong> ${statusText}
                 </div>
             `;
+        }
+
+        // Trigger-Liste aufbauen
+        let triggersHTML = '';
+        if (data.triggers.length === 0) {
+            triggersHTML = '<p style="font-size: 13px; color: #777;">Noch keine Auslöser eingetragen.</p>';
+        } else {
+            // Die neuesten 3 Einträge zuerst anzeigen
+            const meisteTriggers = [...data.triggers].reverse().slice(0, 5);
+            triggersHTML = meisteTriggers.map(t => `
+                <div class="trigger-item">
+                    <div class="trigger-header">
+                        <span>${escapeHtml(t.kategorie)}</span>
+                        <small style="color:#777; font-weight:normal;">${t.datum}</small>
+                    </div>
+                    <div>${escapeHtml(t.notiz)}</div>
+                </div>
+            `).join('');
         }
 
         dashboardCard.innerHTML = `
@@ -115,13 +137,21 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
 
             <div style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0; font-size: 16px;">🔍 Trigger-Tagebuch</h3>
+                    <button id="btnOpenTrigger" style="width: auto; padding: 6px 12px; font-size: 13px; background-color: #00897b;">+ Auslöser loggen</button>
+                </div>
+                ${triggersHTML}
+            </div>
+
+            <div style="margin-top: 20px;">
                 <p><strong>Deine Motivation:</strong> "${escapeHtml(data.gruende)}"</p>
             </div>
 
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
 
-        // Event-Listener für Check-in Buttons
+        // Check-in Event Listener
         if (!heuteCheckIn) {
             document.getElementById('btnCheckinClean')?.addEventListener('click', () => {
                 speichereCheckIn(data, heuteStr, 'clean');
@@ -131,13 +161,50 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Event-Listener für SOS-Button & Reset-Button
+        // Trigger Event Listener
+        document.getElementById('btnOpenTrigger').addEventListener('click', () => {
+            triggerOverlay.style.display = 'flex';
+        });
+
+        // Event-Listener für SOS & Reset
         document.getElementById('sosBtn').addEventListener('click', () => startSosFlow(data));
         document.getElementById('resetBtn').addEventListener('click', () => {
             if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?')) {
                 localStorage.removeItem('nikotinstopp_user_data');
                 location.reload();
             }
+        });
+    }
+
+    // Trigger Formular verarbeiten
+    if (triggerForm) {
+        triggerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const savedData = localStorage.getItem('nikotinstopp_user_data');
+            if (savedData) {
+                const userData = JSON.parse(savedData);
+                if (!userData.triggers) userData.triggers = [];
+
+                const neuerTrigger = {
+                    kategorie: document.getElementById('triggerKategorie').value,
+                    notiz: document.getElementById('triggerNotiz').value,
+                    datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                };
+
+                userData.triggers.push(neuerTrigger);
+                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
+                
+                // Formular zurücksetzen & Modal schliessen
+                triggerForm.reset();
+                triggerOverlay.style.display = 'none';
+                showDashboard(userData);
+            }
+        });
+    }
+
+    if (btnCancelTrigger) {
+        btnCancelTrigger.addEventListener('click', () => {
+            triggerOverlay.style.display = 'none';
         });
     }
 
