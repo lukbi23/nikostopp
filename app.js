@@ -11,8 +11,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const relapseModalContent = document.getElementById('relapseModalContent');
     const helpOverlay = document.getElementById('helpOverlay');
     const btnCloseHelp = document.getElementById('btnCloseHelp');
+    const actOverlay = document.getElementById('actOverlay');
+    const actModalContent = document.getElementById('actModalContent');
 
     let timerInterval = null;
+
+    // 4 EVIDENZBASIERTE ACT-LEKTIONEN
+    const actLektionenData = [
+        {
+            id: 'akt1',
+            titel: '1. Akzeptanz statt Kampf',
+            kategorie: 'Akzeptanz',
+            inhalt: 'Suchtdrang fühlt sich unangenehm an. Versuchst du ihn krampfhaft zu unterdrücken, wird er meist stärker. Statt dagegen anzukämpfen, erlaube dem Gefühl einfach da zu sein – wie eine Welle im Meer, die kommt, ihren Höhepunkt erreicht und wieder abflacht.',
+            uebung: 'Sag dir bei jedem Drang gedanklich: "Ich spüre einen Drang. Das ist okay, er geht von alleine wieder."'
+        },
+        {
+            id: 'akt2',
+            titel: '2. Gedanken sind keine Befehle',
+            kategorie: 'Entkopplung',
+            inhalt: 'Dein Gehirn erzeugt in Suchtmomenten Gedanken wie "Ich brauche jetzt unbedingt eine Dosis". Erinnere dich daran: Ein Gedanke ist nur ein Satz in deinem Kopf – kein Befehl, dem du gehorchen musst.',
+            uebung: 'Ergänze den Gedanken mit: "Ich habe gerade den Gedanken, dass...". Das schafft Abstand.'
+        },
+        {
+            id: 'akt3',
+            titel: '3. Werte als Kompass',
+            kategorie: 'Werte',
+            inhalt: 'Statt dein Handeln vom kurzfristigen Entzug steuern zu lassen, richte dich an deinen persönlichen Werten aus: Freiheit, Gesundheit oder Vorbild sein. Was für ein Mensch möchtest du sein?',
+            uebung: 'Lies dir deine persönliche Motivation durch und verbinde sie gedanklich mit deinem wichtigsten Wert.'
+        },
+        {
+            id: 'akt4',
+            titel: '4. Handeln trotz Verlangen',
+            kategorie: 'Commitment',
+            inhalt: 'Du musst nicht warten, bis der Suchtdrang zu 100% verschwunden ist, um etwas Sinnvolles zu tun. Du kannst das unangenehme Gefühl mitnehmen und gleichzeitig etwas tun, das dir gut tut.',
+            uebung: 'Mache trotz Drang genau jetzt 5 Minuten lang eine Aktivität, die deiner Gesundheit dient.'
+        }
+    ];
 
     // Gespeicherte Daten beim Laden prüfen
     const savedData = localStorage.getItem('nikotinstopp_user_data');
@@ -33,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cravingsBewaeltigt: 0,
                 checkIns: [],
                 triggers: [],
+                actCompleted: [],
                 erstelltAm: new Date().toISOString()
             };
 
@@ -41,7 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Hilfsfunktionen für dynamische Bezeichnungen (Snus vs. Zigaretten vs. Nikotin)
     function getNikotinName(nikotinForm) {
         if (nikotinForm === 'snus') return 'Snus';
         if (nikotinForm === 'zigaretten') return 'Zigaretten';
@@ -62,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.cravingsBewaeltigt === undefined) data.cravingsBewaeltigt = 0;
         if (!data.checkIns) data.checkIns = [];
         if (!data.triggers) data.triggers = [];
+        if (!data.actCompleted) data.actCompleted = [];
 
         const heuteStr = new Date().toISOString().split('T')[0];
         const heute = new Date();
@@ -121,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nikotinName = getNikotinName(data.nikotinForm);
         const unkonsumiertText = getUnkonsumiertLabel(data.nikotinForm);
+        const actAbsolviertCount = data.actCompleted.length;
 
         dashboardCard.innerHTML = `
             ${checkInHTML}
@@ -166,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p><strong>Deine Motivation:</strong> "${escapeHtml(data.gruende)}"</p>
             </div>
 
+            <button id="btnOpenAct" class="btn-act">🧠 ACT-Lektionen (${actAbsolviertCount}/4 absolviert)</button>
             <button id="btnOpenHelp" class="btn-help">📞 Beratung & Hilfsangebote</button>
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
@@ -183,6 +220,10 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerOverlay.style.display = 'flex';
         });
 
+        document.getElementById('btnOpenAct').addEventListener('click', () => {
+            starteActModus(data);
+        });
+
         document.getElementById('btnOpenHelp').addEventListener('click', () => {
             helpOverlay.style.display = 'flex';
         });
@@ -193,6 +234,90 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem('nikotinstopp_user_data');
                 location.reload();
             }
+        });
+    }
+
+    // ACT-LEKTIONEN LOGIK
+    function starteActModus(data) {
+        actOverlay.style.display = 'flex';
+        renderActOverview(data);
+    }
+
+    function renderActOverview(data) {
+        if (!data.actCompleted) data.actCompleted = [];
+
+        const lektionenHTML = actLektionenData.map(l => {
+            const isCompleted = data.actCompleted.includes(l.id);
+            const statusBadge = isCompleted 
+                ? '<span class="act-status" style="color: #2e7d32;">✅ Absolviert</span>' 
+                : '<span class="act-status" style="color: #757575;">⏳ Offen</span>';
+
+            return `
+                <div class="act-card" data-id="${l.id}">
+                    ${statusBadge}
+                    <div class="act-title">${escapeHtml(l.titel)}</div>
+                    <div style="font-size: 13px; color: #555; margin-top: 4px;">Kategorie: ${escapeHtml(l.kategorie)}</div>
+                </div>
+            `;
+        }).join('');
+
+        actModalContent.innerHTML = `
+            <h3>🧠 ACT Mentales Training</h3>
+            <p style="font-size: 14px; color: #555; margin-bottom: 15px;">
+                Lerne den Umgang mit Verlangen durch Akzeptanz & Achtsamkeit.
+            </p>
+
+            ${lektionenHTML}
+
+            <button type="button" id="btnCloseAct" class="btn-secondary" style="margin-top: 10px;">Schliessen</button>
+        `;
+
+        // Click-Listener für die einzelnen Lektionen
+        document.querySelectorAll('.act-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const id = card.getAttribute('data-id');
+                const lektion = actLektionenData.find(l => l.id === id);
+                if (lektion) {
+                    renderActLesson(data, lektion);
+                }
+            });
+        });
+
+        document.getElementById('btnCloseAct').addEventListener('click', () => {
+            actOverlay.style.display = 'none';
+        });
+    }
+
+    function renderActLesson(data, lektion) {
+        const isCompleted = data.actCompleted.includes(lektion.id);
+
+        actModalContent.innerHTML = `
+            <h3>${escapeHtml(lektion.titel)}</h3>
+            
+            <div style="text-align: left; font-size: 14px; line-height: 1.5; margin: 15px 0;">
+                <p>${escapeHtml(lektion.inhalt)}</p>
+                <div style="background: #e1bee7; padding: 10px; border-radius: 6px; margin-top: 10px;">
+                    <strong>💡 Praxis-Übung:</strong><br>
+                    ${escapeHtml(lektion.uebung)}
+                </div>
+            </div>
+
+            ${!isCompleted ? `<button id="btnCompleteAct" style="background-color: #6a1b9a;">Lektion abschliessen</button>` : `<p style="color: #2e7d32; font-weight: bold;">✅ Diese Lektion hast du absolviert!</p>`}
+            
+            <button type="button" id="btnBackToActList" class="btn-secondary">Zurück zur Übersicht</button>
+        `;
+
+        if (!isCompleted) {
+            document.getElementById('btnCompleteAct')?.addEventListener('click', () => {
+                data.actCompleted.push(lektion.id);
+                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+                renderActLesson(data, lektion);
+                showDashboard(data); // Zähler im Dashboard aktualisieren
+            });
+        }
+
+        document.getElementById('btnBackToActList').addEventListener('click', () => {
+            renderActOverview(data);
         });
     }
 
@@ -355,7 +480,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <button id="sosRelapse" class="btn-warning" style="margin-top: 8px;">❌ Leider nachgegeben (Ausrutscher)</button>
         `;
 
-        // Welle erfolgreich überstanden
         document.getElementById('sosSuccess').addEventListener('click', () => {
             userData.cravingsBewaeltigt = (userData.cravingsBewaeltigt || 0) + 1;
             localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
@@ -363,7 +487,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showDashboard(userData);
         });
 
-        // Ausrutscher beim SOS
         document.getElementById('sosRelapse').addEventListener('click', () => {
             closeSos();
             const heuteStr = new Date().toISOString().split('T')[0];
