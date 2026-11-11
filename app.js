@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const triggerOverlay = document.getElementById('triggerOverlay');
     const triggerForm = document.getElementById('triggerForm');
     const btnCancelTrigger = document.getElementById('btnCancelTrigger');
+    const relapseOverlay = document.getElementById('relapseOverlay');
+    const relapseModalContent = document.getElementById('relapseModalContent');
 
     let timerInterval = null;
 
@@ -28,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 gruende: document.getElementById('gruende').value,
                 cravingsBewaeltigt: 0,
                 checkIns: [],
-                triggers: [], // Array für Trigger-Tagebucheinträge
+                triggers: [],
                 erstelltAm: new Date().toISOString()
             };
 
@@ -78,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             const statusText = heuteCheckIn.status === 'clean' 
                 ? '✅ Heute frei geblieben! Super gemacht.' 
-                : '⚠️ Heute gab es einen Ausrutscher. Bleib trotzdem dran!';
+                : '⚠️ Ausrutscher reflektiert. Wichtig ist: Direkt weitermachen!';
             checkInHTML = `
                 <div class="tip-box" style="margin-bottom: 20px; background: #e8f5e9; border-left-color: #2e7d32;">
                     <strong>Tages-Check-in erledigt:</strong> ${statusText}
@@ -86,12 +88,10 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        // Trigger-Liste aufbauen
         let triggersHTML = '';
         if (data.triggers.length === 0) {
             triggersHTML = '<p style="font-size: 13px; color: #777;">Noch keine Auslöser eingetragen.</p>';
         } else {
-            // Die neuesten 3 Einträge zuerst anzeigen
             const meisteTriggers = [...data.triggers].reverse().slice(0, 5);
             triggersHTML = meisteTriggers.map(t => `
                 <div class="trigger-item">
@@ -151,22 +151,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
 
-        // Check-in Event Listener
         if (!heuteCheckIn) {
             document.getElementById('btnCheckinClean')?.addEventListener('click', () => {
                 speichereCheckIn(data, heuteStr, 'clean');
             });
             document.getElementById('btnCheckinSlip')?.addEventListener('click', () => {
-                speichereCheckIn(data, heuteStr, 'slip');
+                starteRueckfallModus(data, heuteStr);
             });
         }
 
-        // Trigger Event Listener
         document.getElementById('btnOpenTrigger').addEventListener('click', () => {
             triggerOverlay.style.display = 'flex';
         });
 
-        // Event-Listener für SOS & Reset
         document.getElementById('sosBtn').addEventListener('click', () => startSosFlow(data));
         document.getElementById('resetBtn').addEventListener('click', () => {
             if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?')) {
@@ -176,7 +173,48 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Trigger Formular verarbeiten
+    // RÜCKFALL-MODUS LOGIK
+    function starteRueckfallModus(data, datumStr) {
+        relapseOverlay.style.display = 'flex';
+        relapseModalContent.innerHTML = `
+            <h3>🌱 Ein Ausrutscher ist kein Scheitern!</h3>
+            <p style="font-size: 14px; text-align: left; line-height: 1.5;">
+                Ein Ausrutscher bedeutet nicht, dass du wieder am Anfang stehst. Fast alle Menschen haben auf dem Weg zum dauerhaften Stopp Ausrutscher.
+            </p>
+            <blockquote style="font-style: italic; background: #fff3e0; padding: 10px; border-left: 4px solid #f57c00; font-size: 13px; text-align: left; margin: 10px 0;">
+                Wichtig ist jetzt: Kein schlechtes Gewissen haben, sondern den Auslöser verstehen und sofort weitermachen!
+            </blockquote>
+
+            <div class="form-group" style="text-align: left; margin-top: 15px;">
+                <label for="relapseTrigger">Was war der Auslöser?</label>
+                <select id="relapseTrigger">
+                    <option value="Stress / Ärger">Stress / Ärger</option>
+                    <option value="Kaffee / Mahlzeit">Kaffee / Mahlzeit</option>
+                    <option value="Geselligkeit / Alkohol">Geselligkeit / Alkohol</option>
+                    <option value="Langeweile / Wartezeit">Langeweile / Wartezeit</option>
+                    <option value="Spontaner Drang">Spontaner Drang</option>
+                </select>
+            </div>
+
+            <button id="btnFinishRelapse" style="background-color: #2e7d32; margin-top: 10px;">Ich mache sofort weiter!</button>
+        `;
+
+        document.getElementById('btnFinishRelapse').addEventListener('click', () => {
+            const ausloeser = document.getElementById('relapseTrigger').value;
+
+            // Ausrutscher auch im Trigger-Tagebuch erfassen
+            data.triggers.push({
+                kategorie: `Ausrutscher: ${ausloeser}`,
+                notiz: 'Auslöser beim Ausrutscher reflektiert.',
+                datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            });
+
+            // Check-in speichern
+            speichereCheckIn(data, datumStr, 'slip');
+            relapseOverlay.style.display = 'none';
+        });
+    }
+
     if (triggerForm) {
         triggerForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -194,7 +232,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 userData.triggers.push(neuerTrigger);
                 localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
                 
-                // Formular zurücksetzen & Modal schliessen
                 triggerForm.reset();
                 triggerOverlay.style.display = 'none';
                 showDashboard(userData);
@@ -243,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3>2. Die Welle reiten & 10-Min-Timer</h3>
             <p>Ein Craving ist wie eine Welle: Es steigt an, erreicht einen Gipfel und baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab.</p>
             <div id="timerDisplay" class="timer-display">10:00</div>
-            <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten.</small></p>
+            <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten[cite: 1].</small></p>
             <button id="sosNext2">Weiter zur Ablenkung & Motivation</button>
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
@@ -279,9 +316,9 @@ document.addEventListener('DOMContentLoaded', () => {
             </blockquote>
             <p><strong>Schnelle Ablenkungs-Tipps:</strong></p>
             <ul style="text-align: left; font-size: 14px;">
-                <li>Trinke ein grosses Glas kaltes Wasser.</li>
-                <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft.</li>
-                <li>Rufe eine Person an oder lenke deine Hände ab.</li>
+                <li>Trinke ein grosses Glas kaltes Wasser[cite: 1].</li>
+                <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft[cite: 1].</li>
+                <li>Rufe eine Person an oder lenke deine Hände ab[cite: 1].</li>
             </ul>
             <button id="sosFinish" style="background-color: #2e7d32; margin-top: 15px;">Ich habe die Welle überstanden!</button>
         `;
@@ -303,22 +340,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tage <= 3) {
             return {
                 title: "Phase 1: Tag 1–3 (Akutphase)",
-                tip: "Entzugssymptome erreichen ihren Höhepunkt um Tag 3 und klingen danach stetig ab. Denke daran: Einzelne Cravings dauern meist nur 10 bis 20 Minuten."
+                tip: "Entzugssymptome erreichen ihren Höhepunkt um Tag 3 und klingen danach stetig ab[cite: 1]. Denke daran: Einzelne Cravings dauern meist nur 10 bis 20 Minuten[cite: 1]."
             };
         } else if (tage <= 14) {
             return {
                 title: "Phase 2: Woche 1–2 (Kritische Phase)",
-                tip: "Die meisten Rückfälle passieren in den ersten 14 Tagen. Halte durch! Der schwerste körperliche Teil ist fast geschafft."
+                tip: "Die meisten Rückfälle passieren in den ersten 14 Tagen[cite: 1]. Halte durch! Der schwerste körperliche Teil ist fast geschafft."
             };
         } else if (tage <= 30) {
             return {
                 title: "Phase 3: Monat 1 (Stabilisierung)",
-                tip: "Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab. Der körperliche Drang lässt nach, beobachte weiter deine Verhaltensauslöser."
+                tip: "Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab[cite: 1]. Der körperliche Drang lässt nach, beobachte weiter deine Verhaltensauslöser."
             };
         } else {
             return {
                 title: "Phase 4: Monat 2+ (Langzeit-Festigung)",
-                tip: "Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen."
+                tip: "Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen[cite: 1]."
             };
         }
     }
