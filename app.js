@@ -41,6 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Hilfsfunktionen für dynamische Bezeichnungen (Snus vs. Zigaretten vs. Nikotin)
+    function getNikotinName(nikotinForm) {
+        if (nikotinForm === 'snus') return 'Snus';
+        if (nikotinForm === 'zigaretten') return 'Zigaretten';
+        return 'Nikotin';
+    }
+
+    function getUnkonsumiertLabel(nikotinForm) {
+        if (nikotinForm === 'snus') return 'Unkonsumierte Portionen Snus';
+        if (nikotinForm === 'zigaretten') return 'Unkonsumierte Zigaretten';
+        return 'Unkonsumierte Einheiten';
+    }
+
     // Hauptfunktion: Dashboard rendern
     function showDashboard(data) {
         onboardingCard.style.display = 'none';
@@ -82,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             const statusText = heuteCheckIn.status === 'clean' 
                 ? '✅ Heute frei geblieben! Super gemacht.' 
-                : '⚠️ Ausrutscher reflektiert. Wichtig ist: Direkt weitermachen!';
+                : '⚠️ Ausrutscher verbucht. Schwamm drüber – direkt weitermachen!';
             checkInHTML = `
                 <div class="tip-box" style="margin-bottom: 20px; background: #e8f5e9; border-left-color: #2e7d32;">
                     <strong>Tages-Check-in erledigt:</strong> ${statusText}
@@ -106,16 +119,19 @@ document.addEventListener('DOMContentLoaded', () => {
             `).join('');
         }
 
+        const nikotinName = getNikotinName(data.nikotinForm);
+        const unkonsumiertText = getUnkonsumiertLabel(data.nikotinForm);
+
         dashboardCard.innerHTML = `
             ${checkInHTML}
 
-            <button id="sosBtn" class="btn-sos">⚡ Craving SOS – Ich habe Suchtdrang!</button>
+            <button id="sosBtn" class="btn-sos">⚡ Craving SOS – Ich habe Drang!</button>
 
             <h2>Dein Fortschritt</h2>
             <div class="grid">
                 <div class="stat-box">
                     <div class="stat-number">${tageRauchfrei}</div>
-                    <div class="stat-label">Tage ohne Nikotin</div>
+                    <div class="stat-label">Tage ohne ${nikotinName}</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-number">${gespartesGeld} CHF</div>
@@ -123,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="stat-box">
                     <div class="stat-number">${eingesparteEinheiten}</div>
-                    <div class="stat-label">Ungesaugte / Ungerauchte Einheiten</div>
+                    <div class="stat-label">${unkonsumiertText}</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-number">${data.cravingsBewaeltigt}</div>
@@ -186,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // RÜCKFALL-MODUS LOGIK
     function starteRueckfallModus(data, datumStr) {
         relapseOverlay.style.display = 'flex';
         relapseModalContent.innerHTML = `
@@ -204,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <option value="Kaffee / Mahlzeit">Kaffee / Mahlzeit</option>
                     <option value="Geselligkeit / Alkohol">Geselligkeit / Alkohol</option>
                     <option value="Langeweile / Wartezeit">Langeweile / Wartezeit</option>
+                    <option value="Gewohnheit / Ort">Gewohnheit / Ort</option>
                     <option value="Spontaner Drang">Spontaner Drang</option>
                 </select>
             </div>
@@ -216,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             data.triggers.push({
                 kategorie: `Ausrutscher: ${ausloeser}`,
-                notiz: 'Auslöser beim Ausrutscher reflektiert.',
+                notiz: 'Auslöser beim Ausrutscher erfasst.',
                 datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
             });
 
@@ -268,11 +286,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderSosStep1(userData) {
+        const nikotinName = getNikotinName(userData.nikotinForm);
         sosModalContent.innerHTML = `
             <h3>1. Impuls benennen</h3>
             <p>Sprich es gedanklich aus:</p>
             <blockquote style="font-style: italic; background: #f0f0f0; padding: 10px; border-radius: 6px;">
-                "Ich spüre gerade den starken Drang zu ${escapeHtml(userData.nikotinForm)}."
+                "Ich spüre gerade den starken Drang zu ${nikotinName}."
             </blockquote>
             <p><strong>Körper-Check:</strong> Wo spürst du den Drang aktuell in deinem Körper? (z.B. Brust, Bauch, Hals). Beobachte das Gefühl einfach, ohne dagegen zu kämpfen.</p>
             <button id="sosNext1">Weiter: Die Welle beobachten</button>
@@ -291,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p>Ein Craving ist wie eine Welle: Es steigt an, erreicht einen Gipfel und baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab.</p>
             <div id="timerDisplay" class="timer-display">10:00</div>
             <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten.</small></p>
-            <button id="sosNext2">Weiter zur Ablenkung & Motivation</button>
+            <button id="sosNext2">Weiter zur Entscheidung</button>
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
 
@@ -319,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderSosStep3(userData) {
         sosModalContent.innerHTML = `
-            <h3>3. Motivation & Handlung</h3>
+            <h3>3. Motivation & Entscheidung</h3>
             <p><strong>Erinnere dich an dein 'Warum':</strong></p>
             <blockquote style="font-style: italic; background: #e8f5e9; padding: 10px; border-radius: 6px; color: #1b5e20;">
                 "${escapeHtml(userData.gruende)}"
@@ -327,17 +346,28 @@ document.addEventListener('DOMContentLoaded', () => {
             <p><strong>Schnelle Ablenkungs-Tipps:</strong></p>
             <ul style="text-align: left; font-size: 14px;">
                 <li>Trinke ein grosses Glas kaltes Wasser.</li>
-                <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft[cite: 1].</li>
-                <li>Rufe eine Person an oder lenke deine Hände ab[cite: 1].</li>
+                <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft.</li>
+                <li>Rufe eine Person an oder lenke deine Hände ab.</li>
             </ul>
-            <button id="sosFinish" style="background-color: #2e7d32; margin-top: 15px;">Ich habe die Welle überstanden!</button>
+            
+            <p style="margin-top: 15px; font-weight: bold;">Wie ist es gelaufen?</p>
+            <button id="sosSuccess" style="background-color: #2e7d32; margin-top: 5px;">✅ Welle überstanden!</button>
+            <button id="sosRelapse" class="btn-warning" style="margin-top: 8px;">❌ Leider nachgegeben (Ausrutscher)</button>
         `;
 
-        document.getElementById('sosFinish').addEventListener('click', () => {
+        // Welle erfolgreich überstanden
+        document.getElementById('sosSuccess').addEventListener('click', () => {
             userData.cravingsBewaeltigt = (userData.cravingsBewaeltigt || 0) + 1;
             localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
             closeSos();
             showDashboard(userData);
+        });
+
+        // Ausrutscher beim SOS
+        document.getElementById('sosRelapse').addEventListener('click', () => {
+            closeSos();
+            const heuteStr = new Date().toISOString().split('T')[0];
+            starteRueckfallModus(userData, heuteStr);
         });
     }
 
@@ -350,22 +380,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tage <= 3) {
             return {
                 title: "Phase 1: Tag 1–3 (Akutphase)",
-                tip: "Entzugssymptome erreichen ihren Höhepunkt um Tag 3 und klingen danach stetig ab[cite: 1]. Denke daran: Einzelne Cravings dauern meist nur 10 bis 20 Minuten[cite: 1]."
+                tip: "Entzugssymptome erreichen ihren Höhepunkt um Tag 3 und klingen danach stetig ab. Denke daran: Einzelne Cravings dauern meist nur 10 bis 20 Minuten."
             };
         } else if (tage <= 14) {
             return {
                 title: "Phase 2: Woche 1–2 (Kritische Phase)",
-                tip: "Die meisten Rückfälle passieren in den ersten 14 Tagen[cite: 1]. Halte durch! Der schwerste körperliche Teil ist fast geschafft."
+                tip: "Die meisten Rückfälle passieren in den ersten 14 Tagen. Halte durch! Der schwerste körperliche Teil ist fast geschafft."
             };
         } else if (tage <= 30) {
             return {
                 title: "Phase 3: Monat 1 (Stabilisierung)",
-                tip: "Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab[cite: 1]. Der körperliche Drang lässt nach, beobachte weiter deine Verhaltensauslöser."
+                tip: "Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab. Der körperliche Drang lässt nach, beobachte weiter deine Verhaltensauslöser."
             };
         } else {
             return {
                 title: "Phase 4: Monat 2+ (Langzeit-Festigung)",
-                tip: "Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen[cite: 1]."
+                tip: "Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen."
             };
         }
     }
