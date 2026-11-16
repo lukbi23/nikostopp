@@ -1,23 +1,40 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const onboardingForm = document.getElementById('onboardingForm');
-    const onboardingCard = document.getElementById('onboardingCard');
-    const dashboardCard = document.getElementById('dashboardCard');
-    const sosOverlay = document.getElementById('sosOverlay');
-    const sosModalContent = document.getElementById('sosModalContent');
-    const triggerOverlay = document.getElementById('triggerOverlay');
-    const triggerForm = document.getElementById('triggerForm');
-    const btnCancelTrigger = document.getElementById('btnCancelTrigger');
-    const relapseOverlay = document.getElementById('relapseOverlay');
-    const relapseModalContent = document.getElementById('relapseModalContent');
-    const helpOverlay = document.getElementById('helpOverlay');
-    const btnCloseHelp = document.getElementById('btnCloseHelp');
-    const actOverlay = document.getElementById('actOverlay');
-    const actModalContent = document.getElementById('actModalContent');
-    const commitmentOverlay = document.getElementById('commitmentOverlay');
-    const commitmentModalContent = document.getElementById('commitmentModalContent');
+    // ───────────────────────── Elemente ─────────────────────────
+    const $ = (id) => document.getElementById(id);
+    const onboardingForm = $('onboardingForm');
+    const onboardingCard = $('onboardingCard');
+    const dashboardCard = $('dashboardCard');
+    const sosOverlay = $('sosOverlay');
+    const sosModalContent = $('sosModalContent');
+    const triggerOverlay = $('triggerOverlay');
+    const triggerForm = $('triggerForm');
+    const btnCancelTrigger = $('btnCancelTrigger');
+    const relapseOverlay = $('relapseOverlay');
+    const relapseModalContent = $('relapseModalContent');
+    const helpOverlay = $('helpOverlay');
+    const btnCloseHelp = $('btnCloseHelp');
+    const actOverlay = $('actOverlay');
+    const actModalContent = $('actModalContent');
+    const commitmentOverlay = $('commitmentOverlay');
+    const commitmentModalContent = $('commitmentModalContent');
+    const importFile = $('importFile');
+
+    const STORAGE_KEY = 'nikotinstopp_user_data';
+    const SOS_DAUER_MS = 10 * 60 * 1000;
+    const ZIEL_TAGE = 180;
 
     let timerInterval = null;
+    let wakeLock = null;
     let justCheckedInClean = false;
+
+    const TRIGGER_KATEGORIEN = [
+        'Stress / Ärger',
+        'Kaffee / Mahlzeit',
+        'Geselligkeit / Alkohol',
+        'Langeweile / Wartezeit',
+        'Gewohnheit / Ort',
+        'Spontaner Drang'
+    ];
 
     const actLektionenData = [
         {
@@ -50,63 +67,168 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     ];
 
-    const savedData = localStorage.getItem('nikotinstopp_user_data');
-    if (savedData) {
-        showDashboard(JSON.parse(savedData));
+    // ───────────────────────── Hilfsfunktionen ─────────────────────────
+    function escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, (m) => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]
+        ));
     }
 
-    if (onboardingForm) {
-        onboardingForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-
-            const userData = {
-                nikotinForm: document.getElementById('nikotinForm').value,
-                tagesMenge: parseInt(document.getElementById('tagesMenge').value, 10),
-                tagesKosten: parseFloat(document.getElementById('tagesKosten').value),
-                stichtag: document.getElementById('stichtag').value,
-                gruende: document.getElementById('gruende').value,
-                cravingsBewaeltigt: 0,
-                checkIns: [],
-                triggers: [],
-                actCompleted: [],
-                commitment: null,
-                erstelltAm: new Date().toISOString()
-            };
-
-            localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
-            showDashboard(userData);
-        });
+    // Datumsfunktionen arbeiten bewusst mit LOKALER Zeit (nicht UTC),
+    // sonst stimmen Tage in der Schweiz um 1–2 Stunden nach Mitternacht nicht.
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toISODate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+    function parseISODate(s) {
+        const [y, m, d] = String(s).split('-').map(Number);
+        return new Date(y, (m || 1) - 1, d || 1);
+    }
+    function heuteISO() { return toISODate(new Date()); }
+    function tageZwischen(neuer, aelter) {
+        // Differenz in ganzen Kalendertagen (sommerzeit-sicher)
+        const a = Date.UTC(neuer.getFullYear(), neuer.getMonth(), neuer.getDate());
+        const b = Date.UTC(aelter.getFullYear(), aelter.getMonth(), aelter.getDate());
+        return Math.round((a - b) / 86400000);
+    }
+    function formatDatum(d) {
+        return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+    function addDaysFormatted(startISO, tage) {
+        const d = parseISODate(startISO);
+        d.setDate(d.getDate() + tage);
+        return formatDatum(d);
+    }
+    function formatTriggerZeit(t) {
+        if (t.ts) {
+            return new Date(t.ts).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+        return t.datum || '';
     }
 
-    function getNikotinName(nikotinForm) {
-        if (nikotinForm === 'snus') return 'Snus';
-        if (nikotinForm === 'zigaretten') return 'Zigaretten';
+    function normalisiere(data) {
+        if (data.cravingsBewaeltigt === undefined) data.cravingsBewaeltigt = 0;
+        if (!Array.isArray(data.checkIns)) data.checkIns = [];
+        if (!Array.isArray(data.triggers)) data.triggers = [];
+        if (!Array.isArray(data.actCompleted)) data.actCompleted = [];
+        if (data.commitment === undefined) data.commitment = null;
+        if (data.commitment && data.commitment.active && !data.commitment.startDatumISO) {
+            // Alte Verträge: Datum aus "TT.MM.JJJJ" übernehmen, sonst Stichtag
+            const m = String(data.commitment.startDatum || '').match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+            data.commitment.startDatumISO = m ? `${m[3]}-${pad(m[2])}-${pad(m[1])}` : data.stichtag;
+        }
+        return data;
+    }
+
+    function loadData() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? normalisiere(JSON.parse(raw)) : null;
+        } catch (err) {
+            console.error('Daten konnten nicht gelesen werden:', err);
+            return null;
+        }
+    }
+
+    function saveData(data) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (err) {
+            console.error('Speichern fehlgeschlagen:', err);
+            alert('Speichern fehlgeschlagen. Ist der Speicher deines Browsers voll oder blockiert?');
+        }
+    }
+
+    function getNikotinName(form) {
+        if (form === 'snus') return 'Snus';
+        if (form === 'zigaretten') return 'Zigaretten';
         return 'Nikotin';
     }
 
-    function getUnkonsumiertLabel(nikotinForm) {
-        if (nikotinForm === 'snus') return 'Unkonsumierte Portionen Snus';
-        if (nikotinForm === 'zigaretten') return 'Unkonsumierte Zigaretten';
+    function getUnkonsumiertLabel(form) {
+        if (form === 'snus') return 'Unkonsumierte Portionen Snus';
+        if (form === 'zigaretten') return 'Unkonsumierte Zigaretten';
         return 'Unkonsumierte Einheiten';
     }
 
-    function renderCalendarHTML(data) {
-        const stichtagDate = new Date(data.stichtag);
-        stichtagDate.setHours(0, 0, 0, 0);
+    function closeOverlay(el) { el.style.display = 'none'; }
 
+    // ───────────────────────── Statistik ─────────────────────────
+    function berechneStatistik(data) {
         const heute = new Date();
         heute.setHours(0, 0, 0, 0);
-        const heuteStr = heute.toISOString().split('T')[0];
+        const start = parseISODate(data.stichtag);
+
+        const tageGesamt = Math.max(0, tageZwischen(heute, start));
+        const startVorbei = tageZwischen(heute, start) >= 0;
+
+        // Ausrutscher-Tage seit Stichtag (eindeutige Daten)
+        const slipDaten = [...new Set(
+            data.checkIns
+                .filter(c => c.status === 'slip' && c.datum >= data.stichtag)
+                .map(c => c.datum)
+        )].sort();
+
+        const letzterSlip = slipDaten.length ? slipDaten[slipDaten.length - 1] : null;
+        const heuteStr = toISODate(heute);
+
+        // Aktuelle Serie: Tage seit dem letzten Ausrutscher (sonst seit Stichtag)
+        const serie = letzterSlip
+            ? Math.max(0, tageZwischen(heute, parseISODate(letzterSlip)))
+            : tageGesamt;
+
+        // Nur vergangene Ausrutscher-Tage verringern die Ersparnis
+        const slipTageVergangen = slipDaten.filter(d => d < heuteStr).length;
+        const freieTage = Math.max(0, tageGesamt - slipTageVergangen);
+
+        return {
+            tageGesamt,
+            startVorbei,
+            serie,
+            slipAnzahl: slipDaten.length,
+            hatSlip: slipDaten.length > 0,
+            gespartesGeld: (freieTage * data.tagesKosten).toFixed(2),
+            eingesparteEinheiten: freieTage * data.tagesMenge
+        };
+    }
+
+    function getPhaseInfo(tage) {
+        if (tage <= 3) {
+            return {
+                title: 'Phase 1: Tag 1–3 (Akutphase)',
+                tip: 'Entzugssymptome sind meist um Tag 3 am stärksten und klingen danach ab. Einzelne Cravings dauern oft nur wenige Minuten bis etwa 20 Minuten.'
+            };
+        } else if (tage <= 14) {
+            return {
+                title: 'Phase 2: Woche 1–2 (Kritische Phase)',
+                tip: 'Die ersten zwei Wochen sind für viele die schwierigste Zeit. Halte durch – der schwerste körperliche Teil liegt bald hinter dir.'
+            };
+        } else if (tage <= 30) {
+            return {
+                title: 'Phase 3: Monat 1 (Stabilisierung)',
+                tip: 'Körperliche Entzugssymptome klingen in 3 bis 4 Wochen meist weitgehend ab. Beobachte jetzt vor allem deine Verhaltensauslöser.'
+            };
+        }
+        return {
+            title: 'Phase 4: Monat 2+ (Langzeit-Festigung)',
+            tip: 'Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen.'
+        };
+    }
+
+    // ───────────────────────── Kalender ─────────────────────────
+    function renderCalendarHTML(data) {
+        const start = parseISODate(data.stichtag);
+        const heute = new Date();
+        heute.setHours(0, 0, 0, 0);
+        const heuteStr = toISODate(heute);
+
+        const diff = tageZwischen(heute, start);
+        const startOffset = diff > 13 ? diff - 13 : 0;
 
         let daysHTML = '';
-        const diffDays = Math.floor((heute.getTime() - stichtagDate.getTime()) / (1000 * 60 * 60 * 24));
-        const startOffset = diffDays > 13 ? diffDays - 13 : 0;
-
         for (let i = 0; i < 14; i++) {
             const dayNumber = startOffset + i + 1;
-            const currentDate = new Date(stichtagDate);
-            currentDate.setDate(stichtagDate.getDate() + startOffset + i);
-            const dateStr = currentDate.toISOString().split('T')[0];
+            const currentDate = new Date(start);
+            currentDate.setDate(start.getDate() + startOffset + i);
+            const dateStr = toISODate(currentDate);
 
             let phaseShort = 'P1';
             if (dayNumber > 30) phaseShort = 'P4';
@@ -118,22 +240,17 @@ document.addEventListener('DOMContentLoaded', () => {
             let icon = '·';
 
             if (checkIn) {
-                if (checkIn.status === 'clean') {
-                    statusClass = 'clean';
-                    icon = '✅';
-                } else {
-                    statusClass = 'slip';
-                    icon = '⚠️';
-                }
-            } else if (currentDate < heute) {
+                statusClass = checkIn.status === 'clean' ? 'clean' : 'slip';
+                icon = checkIn.status === 'clean' ? '✅' : '⚠️';
+            } else if (dateStr < heuteStr) {
                 statusClass = 'clean';
                 icon = '✓';
             }
 
-            const isTodayClass = (dateStr === heuteStr) ? 'today' : '';
+            const isToday = dateStr === heuteStr ? 'today' : '';
 
             daysHTML += `
-                <div class="cal-day ${statusClass} ${isTodayClass}" title="Tag ${dayNumber} (${dateStr})">
+                <div class="cal-day ${statusClass} ${isToday}" title="Tag ${dayNumber} (${dateStr})">
                     <div>T${dayNumber}</div>
                     <div style="font-size: 13px; margin: 2px 0;">${icon}</div>
                     <span class="cal-phase-tag">${phaseShort}</span>
@@ -147,39 +264,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     <strong style="font-size: 14px; color: #2c3e50;">🗓️ Dein 14-Tage-Verlauf & Phasen</strong>
                     <small style="font-size: 11px; color: #666;">P1: Tag 1-3 | P2: W1-2</small>
                 </div>
-                <div class="calendar-grid">
-                    ${daysHTML}
-                </div>
+                <div class="calendar-grid">${daysHTML}</div>
             </div>
         `;
     }
 
+    // ───────────────────────── Dashboard ─────────────────────────
+    function commitmentWerte(c, data) {
+        const tag = Number(c.tagesBetrag ?? c.betrag ?? data.tagesKosten ?? 0);
+        const zyklus = c.zyklus || 'täglich';
+        const faktor = zyklus === 'wöchentlich' ? 7 : (zyklus === 'monatlich' ? 30 : 1);
+        const zyklusBetrag = Number(c.zyklusBetrag ?? (tag * faktor));
+        return { tag, zyklus, zyklusBetrag };
+    }
+
+    function ausloeserAuswertung(data) {
+        if (data.triggers.length < 3) return '';
+        const zaehler = {};
+        data.triggers.forEach(t => {
+            const name = String(t.kategorie || '').replace(/^Ausrutscher:\s*/, '');
+            if (name) zaehler[name] = (zaehler[name] || 0) + 1;
+        });
+        const top = Object.entries(zaehler).sort((a, b) => b[1] - a[1])[0];
+        if (!top) return '';
+        return `<p style="font-size: 13px; color: #00695c; margin: 0 0 10px 0;">📊 Häufigster Auslöser: <strong>${escapeHtml(top[0])}</strong> (${top[1]}×)</p>`;
+    }
+
     function showDashboard(data) {
+        normalisiere(data);
         onboardingCard.style.display = 'none';
         dashboardCard.style.display = 'block';
 
-        if (data.cravingsBewaeltigt === undefined) data.cravingsBewaeltigt = 0;
-        if (!data.checkIns) data.checkIns = [];
-        if (!data.triggers) data.triggers = [];
-        if (!data.actCompleted) data.actCompleted = [];
-
-        const heuteStr = new Date().toISOString().split('T')[0];
-        const heute = new Date();
-        heute.setHours(0, 0, 0, 0);
-
-        const stichtagDate = new Date(data.stichtag);
-        stichtagDate.setHours(0, 0, 0, 0);
-
-        const diffTime = heute.getTime() - stichtagDate.getTime();
-        let tageRauchfrei = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        if (tageRauchfrei < 0) tageRauchfrei = 0;
-
-        const gespartesGeld = (tageRauchfrei * data.tagesKosten).toFixed(2);
-        const eingesparteEinheiten = tageRauchfrei * data.tagesMenge;
-        const phaseInfo = getPhaseInfo(tageRauchfrei);
-
+        const heuteStr = heuteISO();
+        const stats = berechneStatistik(data);
+        const phaseInfo = getPhaseInfo(stats.serie);
         const heuteCheckIn = data.checkIns.find(c => c.datum === heuteStr);
+        const nikotinName = getNikotinName(data.nikotinForm);
 
+        // Check-in-Bereich
         let checkInHTML = '';
         if (!heuteCheckIn) {
             checkInHTML = `
@@ -217,82 +339,89 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        const calendarHTML = renderCalendarHTML(data);
+        // Stichtag liegt in der Zukunft
+        const zukunftHTML = !stats.startVorbei ? `
+            <div class="tip-box" style="margin-bottom: 20px;">
+                <strong>Dein Stichtag ist am ${formatDatum(parseISODate(data.stichtag))}.</strong>
+                Bis dahin zählt die App noch nicht – bereite dich vor und schau dir die ACT-Lektionen an.
+            </div>
+        ` : '';
 
-        let triggersHTML = '';
+        // Trigger-Tagebuch
+        let triggersHTML;
         if (data.triggers.length === 0) {
             triggersHTML = '<p style="font-size: 13px; color: #777;">Noch keine Auslöser eingetragen.</p>';
         } else {
-            const meisteTriggers = [...data.triggers].reverse().slice(0, 5);
-            triggersHTML = meisteTriggers.map(t => `
+            triggersHTML = [...data.triggers].reverse().slice(0, 5).map(t => `
                 <div class="trigger-item">
                     <div class="trigger-header">
                         <span>${escapeHtml(t.kategorie)}</span>
-                        <small style="color:#777; font-weight:normal;">${t.datum}</small>
+                        <small style="color:#777; font-weight:normal;">${escapeHtml(formatTriggerZeit(t))}</small>
                     </div>
                     <div>${escapeHtml(t.notiz)}</div>
                 </div>
             `).join('');
         }
 
-        const nikotinName = getNikotinName(data.nikotinForm);
-        const unkonsumiertText = getUnkonsumiertLabel(data.nikotinForm);
-        const actAbsolviertCount = data.actCompleted.length;
-
+        // Commitment
         let commitmentButtonText = '🤝 Commitment-Modus einrichten';
         let commitmentInfoHTML = '';
-
         if (data.commitment && data.commitment.active) {
             const c = data.commitment;
-            // Fallback für ältere gespeicherte Verträge (betrag -> tagesBetrag / zyklusBetrag)
-            const tagesWert = Number(c.tagesBetrag ?? c.betrag ?? data.tagesKosten ?? 0);
-            const zyklus = c.zyklus || 'täglich';
-            const faktor = zyklus === 'wöchentlich' ? 7 : (zyklus === 'monatlich' ? 30 : 1);
-            const zyklusWert = Number(c.zyklusBetrag ?? (tagesWert * faktor));
-            const zyklusText = zyklus === 'täglich' ? 'Tag' : (zyklus === 'wöchentlich' ? 'Woche' : 'Monat');
-
+            const w = commitmentWerte(c, data);
+            const zyklusText = w.zyklus === 'täglich' ? 'Tag' : (w.zyklus === 'wöchentlich' ? 'Woche' : 'Monat');
             commitmentButtonText = `🤝 Commitment-Vertrag (${escapeHtml(c.personName)})`;
             commitmentInfoHTML = `
                 <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; text-align: left;">
                     <strong>Vertrauensperson:</strong> ${escapeHtml(c.personName)}<br>
-                    <strong>Einzahlung:</strong> ${zyklusWert.toFixed(2)} CHF pro ${zyklusText} (Basis: ${tagesWert.toFixed(2)} CHF/Tag)<br>
+                    <strong>Einzahlung:</strong> ${w.zyklusBetrag.toFixed(2)} CHF pro ${zyklusText} (Basis: ${w.tag.toFixed(2)} CHF/Tag)<br>
                     <strong>Rückzahlung an Checkpoints:</strong> 50 %<br>
-                    <small>Regel A (Mild): Kein Geldverlust bei Ausrutschern.</small>
+                    <small>Faire Regel: Kein Geldverlust bei Ausrutschern.</small>
                 </div>
             `;
         }
 
-        dashboardCard.innerHTML = `
-            ${checkInHTML}
+        const serieLabel = stats.hatSlip
+            ? `Tage ohne ${nikotinName} (seit letztem Ausrutscher)`
+            : `Tage ohne ${nikotinName}`;
 
-            ${calendarHTML}
+        const totalZeile = stats.startVorbei
+            ? `Seit Stichtag: ${stats.tageGesamt} Tage · Ausrutscher: ${stats.slipAnzahl}`
+            : '';
+
+        dashboardCard.innerHTML = `
+            ${zukunftHTML}
+            ${checkInHTML}
 
             <button id="sosBtn" class="btn-sos">⚡ Craving SOS – Ich habe Drang!</button>
 
             <h2>Dein Fortschritt</h2>
             <div class="grid">
                 <div class="stat-box">
-                    <div class="stat-number">${tageRauchfrei}</div>
-                    <div class="stat-label">Tage ohne ${nikotinName}</div>
+                    <div class="stat-number">${stats.serie}</div>
+                    <div class="stat-label">${escapeHtml(serieLabel)}</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-number">${gespartesGeld} CHF</div>
+                    <div class="stat-number">${stats.gespartesGeld} CHF</div>
                     <div class="stat-label">Gespartes Geld</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-number">${eingesparteEinheiten}</div>
-                    <div class="stat-label">${unkonsumiertText}</div>
+                    <div class="stat-number">${stats.eingesparteEinheiten}</div>
+                    <div class="stat-label">${getUnkonsumiertLabel(data.nikotinForm)}</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-number">${data.cravingsBewaeltigt}</div>
                     <div class="stat-label">Bewältigte Cravings</div>
                 </div>
             </div>
+            ${totalZeile ? `<p style="font-size: 12px; color: #666; text-align: center; margin: -5px 0 15px 0;">${totalZeile}</p>` : ''}
+
+            ${renderCalendarHTML(data)}
 
             <div>
                 <span class="phase-badge">${escapeHtml(phaseInfo.title)}</span>
                 <div class="tip-box">
-                    <strong>Evidenz-Hinweis:</strong> ${escapeHtml(phaseInfo.tip)}
+                    <strong>Gut zu wissen:</strong> ${escapeHtml(phaseInfo.tip)}
                 </div>
             </div>
 
@@ -301,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 style="margin: 0; font-size: 16px;">🔍 Trigger-Tagebuch</h3>
                     <button id="btnOpenTrigger" style="width: auto; padding: 6px 12px; font-size: 13px; background-color: #00897b;">+ Auslöser loggen</button>
                 </div>
+                ${ausloeserAuswertung(data)}
                 ${triggersHTML}
             </div>
 
@@ -311,76 +441,174 @@ document.addEventListener('DOMContentLoaded', () => {
             <button id="btnOpenCommitment" class="btn-commitment">${commitmentButtonText}</button>
             ${commitmentInfoHTML}
 
-            <button id="btnOpenAct" class="btn-act">🧠 ACT-Lektionen (${actAbsolviertCount}/4 absolviert)</button>
+            <button id="btnOpenAct" class="btn-act">🧠 ACT-Lektionen (${data.actCompleted.length}/${actLektionenData.length} absolviert)</button>
             <button id="btnOpenHelp" class="btn-help">📞 Beratung & Hilfsangebote</button>
+
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button id="btnExport" class="btn-secondary" style="margin-top: 0; font-size: 14px;">💾 Backup speichern</button>
+                <button id="btnImport" class="btn-secondary" style="margin-top: 0; font-size: 14px;">📂 Backup laden</button>
+            </div>
             <button id="resetBtn" class="btn-danger">Daten zurücksetzen</button>
         `;
 
         if (!heuteCheckIn) {
-            document.getElementById('btnCheckinClean')?.addEventListener('click', () => {
+            $('btnCheckinClean').addEventListener('click', () => {
                 justCheckedInClean = true;
                 speichereCheckIn(data, heuteStr, 'clean');
             });
-            document.getElementById('btnCheckinSlip')?.addEventListener('click', () => {
-                starteRueckfallModus(data, heuteStr);
-            });
+            $('btnCheckinSlip').addEventListener('click', () => starteRueckfallModus(data, heuteStr));
         }
 
-        document.getElementById('btnOpenTrigger').addEventListener('click', () => {
-            triggerOverlay.style.display = 'flex';
-        });
-
-        document.getElementById('btnOpenAct').addEventListener('click', () => {
-            starteActModus(data);
-        });
-
-        document.getElementById('btnOpenCommitment').addEventListener('click', () => {
-            starteCommitmentModus(data);
-        });
-
-        document.getElementById('btnOpenHelp').addEventListener('click', () => {
-            helpOverlay.style.display = 'flex';
-        });
-
-        document.getElementById('sosBtn').addEventListener('click', () => startSosFlow(data));
-        document.getElementById('resetBtn').addEventListener('click', () => {
-            if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?')) {
-                localStorage.removeItem('nikotinstopp_user_data');
+        $('btnOpenTrigger').addEventListener('click', () => { triggerOverlay.style.display = 'flex'; });
+        $('btnOpenAct').addEventListener('click', () => starteActModus(data));
+        $('btnOpenCommitment').addEventListener('click', () => starteCommitmentModus(data));
+        $('btnOpenHelp').addEventListener('click', () => { helpOverlay.style.display = 'flex'; });
+        $('sosBtn').addEventListener('click', () => startSosFlow(data));
+        $('btnExport').addEventListener('click', () => exportData(data));
+        $('btnImport').addEventListener('click', () => importFile.click());
+        $('resetBtn').addEventListener('click', () => {
+            if (confirm('Möchtest du deine Daten wirklich löschen und das Onboarding neu starten?\n\nTipp: Speichere vorher ein Backup.')) {
+                localStorage.removeItem(STORAGE_KEY);
                 location.reload();
             }
         });
     }
 
+    // ───────────────────────── Check-in ─────────────────────────
+    function speichereCheckIn(data, datum, status) {
+        // Pro Tag nur ein Eintrag: ein späterer Eintrag ersetzt den früheren
+        data.checkIns = data.checkIns.filter(c => c.datum !== datum);
+        data.checkIns.push({ datum, status, zeitstempel: new Date().toISOString() });
+        saveData(data);
+        showDashboard(data);
+    }
+
+    function fuegeTriggerHinzu(data, kategorie, notiz) {
+        const jetzt = new Date();
+        data.triggers.push({
+            kategorie,
+            notiz,
+            ts: jetzt.toISOString(),
+            datum: jetzt.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        });
+    }
+
+    // ───────────────────────── Onboarding ─────────────────────────
+    const stichtagInput = $('stichtag');
+    if (stichtagInput && !stichtagInput.value) stichtagInput.value = heuteISO();
+
+    if (onboardingForm) {
+        onboardingForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const userData = {
+                nikotinForm: $('nikotinForm').value,
+                tagesMenge: parseInt($('tagesMenge').value, 10),
+                tagesKosten: parseFloat($('tagesKosten').value),
+                stichtag: $('stichtag').value,
+                gruende: $('gruende').value.trim(),
+                cravingsBewaeltigt: 0,
+                checkIns: [],
+                triggers: [],
+                actCompleted: [],
+                commitment: null,
+                erstelltAm: new Date().toISOString()
+            };
+            saveData(userData);
+            showDashboard(userData);
+        });
+    }
+
+    // ───────────────────────── Trigger-Formular ─────────────────────────
+    if (triggerForm) {
+        triggerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const userData = loadData();
+            if (!userData) return;
+            fuegeTriggerHinzu(userData, $('triggerKategorie').value, $('triggerNotiz').value.trim());
+            saveData(userData);
+            triggerForm.reset();
+            closeOverlay(triggerOverlay);
+            showDashboard(userData);
+        });
+    }
+    if (btnCancelTrigger) btnCancelTrigger.addEventListener('click', () => closeOverlay(triggerOverlay));
+    if (btnCloseHelp) btnCloseHelp.addEventListener('click', () => closeOverlay(helpOverlay));
+
+    // ───────────────────────── Backup ─────────────────────────
+    function exportData(data) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nikostopp-backup-${heuteISO()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function importData(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const parsed = JSON.parse(reader.result);
+                if (!parsed || typeof parsed.stichtag !== 'string' || typeof parsed.tagesKosten !== 'number') {
+                    throw new Error('Ungültiges Format');
+                }
+                if (!confirm('Backup laden? Deine aktuellen Daten in dieser App werden überschrieben.')) return;
+                saveData(normalisiere(parsed));
+                location.reload();
+            } catch (err) {
+                alert('Diese Datei ist kein gültiges NikoStopp-Backup.');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    if (importFile) {
+        importFile.addEventListener('change', () => {
+            if (importFile.files && importFile.files[0]) importData(importFile.files[0]);
+            importFile.value = '';
+        });
+    }
+    const btnImportOnboarding = $('btnImportOnboarding');
+    if (btnImportOnboarding) btnImportOnboarding.addEventListener('click', () => importFile.click());
+
+    // ───────────────────────── Commitment ─────────────────────────
     function starteCommitmentModus(data) {
         commitmentOverlay.style.display = 'flex';
-
-        if (data.commitment && data.commitment.active) {
-            renderCommitmentVertragView(data);
-        } else {
-            renderCommitmentForm(data);
-        }
+        if (data.commitment && data.commitment.active) renderCommitmentVertragView(data);
+        else renderCommitmentForm(data);
     }
 
     function renderCommitmentForm(data) {
         const tagesBetrag = data.tagesKosten ? data.tagesKosten : 8.00;
+        // Vorschlag: Stichtag, falls er noch in der Zukunft liegt, sonst heute
+        const startVorschlag = data.stichtag > heuteISO() ? data.stichtag : heuteISO();
 
         commitmentModalContent.innerHTML = `
             <h3>🤝 Commitment-Modus</h3>
-            
+
             <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #fff8e1; border-left: 4px solid #ffa000; padding: 10px 12px; border-radius: 6px; margin-bottom: 10px;">
                 <strong>1. Was ist der Commitment-Modus?</strong><br>
-                Du schliesst eine freiwillige Vereinbarung mit einer Vertrauensperson ab: Statt dein Geld für Nikotin auszugeben, zahlst du den Betrag regelmässig an diese Person (z. B. auf ein separates Sparkonto). Bei erreichten Meilensteinen (Checkpoints) bekommst du dein Geld schrittweise zurück. Die App verwaltet kein Geld, sondern erstellt den Zahlungsplan und Vertrag.
+                Du schliesst eine freiwillige Vereinbarung mit einer Vertrauensperson ab: Statt dein Geld für Nikotin auszugeben, zahlst du den Betrag regelmässig an diese Person (z. B. auf ein separates Sparkonto). Bei erreichten Meilensteinen (Checkpoints) bekommst du dein Geld schrittweise zurück. Die App verwaltet kein Geld, sondern erstellt den Zahlungsplan und Vertragstext.
             </div>
 
             <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #e3f2fd; border-left: 4px solid #1976d2; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px;">
-                <strong>2. Wieso macht das Sinn?</strong><br>
-                Reine Willenskraft ist laut Forschung die schwächste Strategie. Klinische Studien zeigen, dass finanzielle Selbstverpflichtungen die Erfolgsquote <strong>mehr als verdoppeln</strong>. Die soziale Verbindlichkeit gegenüber deiner Vertrauensperson hilft dir, akute Cravings auszusitzen.
+                <strong>2. Wieso kann das helfen?</strong><br>
+                Studien zu finanziellen Anreizen beim Rauchstopp deuten darauf hin, dass verbindliche Vereinbarungen die Erfolgschancen erhöhen können. Garantiert ist nichts. Da bei der fairen Regel kein Geld verfällt, liegt die Wirkung hier vor allem in der sozialen Verbindlichkeit gegenüber deiner Vertrauensperson.
             </div>
 
             <form id="commitmentForm" style="text-align: left;">
                 <div class="form-group">
                     <label for="comName">Name deiner Vertrauensperson:</label>
                     <input type="text" id="comName" placeholder="z. B. Anna (Partner/in, Freund/in)" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="comStart">Startdatum des Vertrags:</label>
+                    <input type="date" id="comStart" value="${startVorschlag}" required>
+                    <small style="color: #666;">Vorschlag: dein Stichtag oder heute, falls der Stichtag schon vorbei ist.</small>
                 </div>
 
                 <div class="form-group">
@@ -410,121 +638,91 @@ document.addEventListener('DOMContentLoaded', () => {
             </form>
         `;
 
-        const inputBetrag = document.getElementById('comBetrag');
-        const selectZyklus = document.getElementById('comZyklus');
-        const vorschauBox = document.getElementById('zyklusVorschau');
+        const inputBetrag = $('comBetrag');
+        const selectZyklus = $('comZyklus');
+        const vorschauBox = $('zyklusVorschau');
 
         function updateVorschau() {
             const tag = parseFloat(inputBetrag.value) || 0;
-            const zyklus = selectZyklus.value;
             let faktor = 1;
             let einheit = 'Tag';
-
-            if (zyklus === 'wöchentlich') {
-                faktor = 7;
-                einheit = 'Woche';
-            } else if (zyklus === 'monatlich') {
-                faktor = 30;
-                einheit = 'Monat (30 Tage)';
-            }
-
-            const rate = (tag * faktor).toFixed(2);
-            const gesamt180 = (tag * 180).toFixed(2);
+            if (selectZyklus.value === 'wöchentlich') { faktor = 7; einheit = 'Woche'; }
+            else if (selectZyklus.value === 'monatlich') { faktor = 30; einheit = 'Monat (30 Tage)'; }
 
             vorschauBox.innerHTML = `
-                <strong>Deine Zahlungsrate:</strong> ${rate} CHF pro ${einheit}<br>
-                <strong>Gesamter Sparbetrag (180 Tage):</strong> ${gesamt180} CHF<br>
+                <strong>Deine Zahlungsrate:</strong> ${(tag * faktor).toFixed(2)} CHF pro ${einheit}<br>
+                <strong>Gesamter Sparbetrag (${ZIEL_TAGE} Tage):</strong> ${(tag * ZIEL_TAGE).toFixed(2)} CHF<br>
                 <small>Bei Erfolg am Zieltag (Monat 6) erhältst du 100 % zurück.</small>
             `;
         }
-
         updateVorschau();
         inputBetrag.addEventListener('input', updateVorschau);
         selectZyklus.addEventListener('change', updateVorschau);
 
-        document.getElementById('commitmentForm').addEventListener('submit', (e) => {
+        $('commitmentForm').addEventListener('submit', (e) => {
             e.preventDefault();
-
             const tagesWert = parseFloat(inputBetrag.value);
-            const gewaehlterZyklus = selectZyklus.value;
-            const faktor = gewaehlterZyklus === 'täglich' ? 1 : (gewaehlterZyklus === 'wöchentlich' ? 7 : 30);
+            const zyklus = selectZyklus.value;
+            const faktor = zyklus === 'täglich' ? 1 : (zyklus === 'wöchentlich' ? 7 : 30);
 
             data.commitment = {
                 active: true,
-                personName: document.getElementById('comName').value,
+                personName: $('comName').value.trim(),
                 tagesBetrag: tagesWert,
-                zyklus: gewaehlterZyklus,
+                zyklus,
                 zyklusBetrag: tagesWert * faktor,
-                startDatumISO: new Date().toISOString().split('T')[0]
+                startDatumISO: $('comStart').value || startVorschlag
             };
-
-            localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+            saveData(data);
             renderCommitmentVertragView(data);
             showDashboard(data);
         });
 
-        document.getElementById('btnCloseCommitment').addEventListener('click', () => {
-            commitmentOverlay.style.display = 'none';
-        });
-    }
-
-    function addDaysFormatted(startDateISO, daysToAdd) {
-        const d = new Date(startDateISO);
-        d.setDate(d.getDate() + daysToAdd);
-        return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        $('btnCloseCommitment').addEventListener('click', () => closeOverlay(commitmentOverlay));
     }
 
     function renderCommitmentVertragView(data) {
         const c = data.commitment;
-        const startISO = c.startDatumISO || new Date().toISOString().split('T')[0];
-        // Fallback auch hier für alte Verträge
-        const tag = Number(c.tagesBetrag ?? c.betrag ?? data.tagesKosten ?? 0);
-        const zyklus = c.zyklus || 'täglich';
-        const faktor = zyklus === 'wöchentlich' ? 7 : (zyklus === 'monatlich' ? 30 : 1);
-        const zyklusBetrag = Number(c.zyklusBetrag ?? (tag * faktor));
+        const startISO = c.startDatumISO || data.stichtag;
+        const w = commitmentWerte(c, data);
+        const tag = w.tag;
 
+        // Einzahlungsplan (summiert sich immer exakt auf 180 Tage)
         let einzahlungsListe = '';
-        if (zyklus === 'täglich') {
-            einzahlungsListe = `- Täglich vom ${addDaysFormatted(startISO, 0)} bis ${addDaysFormatted(startISO, 180)}: je ${tag.toFixed(2)} CHF (180 Raten = ${(tag * 180).toFixed(2)} CHF)`;
-        } else if (zyklus === 'wöchentlich') {
-            const wochenRate = (tag * 7).toFixed(2);
-            const daten = [];
-            for (let w = 0; w < 26; w++) {
-                daten.push(`  • Woche ${w + 1} (${addDaysFormatted(startISO, w * 7)}): ${wochenRate} CHF`);
+        if (w.zyklus === 'täglich') {
+            einzahlungsListe = `- Täglich vom ${addDaysFormatted(startISO, 0)} bis ${addDaysFormatted(startISO, ZIEL_TAGE - 1)}: je ${tag.toFixed(2)} CHF (${ZIEL_TAGE} Raten = ${(tag * ZIEL_TAGE).toFixed(2)} CHF)`;
+        } else if (w.zyklus === 'wöchentlich') {
+            const zeilen = [];
+            for (let wo = 0; wo * 7 < ZIEL_TAGE; wo++) {
+                const tageInWoche = Math.min(7, ZIEL_TAGE - wo * 7);
+                zeilen.push(`  • Woche ${wo + 1} (${addDaysFormatted(startISO, wo * 7)}): ${(tag * tageInWoche).toFixed(2)} CHF`);
             }
-            einzahlungsListe = daten.join('\n');
+            einzahlungsListe = zeilen.join('\n');
         } else {
-            const monatsRate = (tag * 30).toFixed(2);
-            const daten = [];
-            for (let m = 0; m < 6; m++) {
-                daten.push(`  • Monat ${m + 1} (${addDaysFormatted(startISO, m * 30)}): ${monatsRate} CHF`);
+            const zeilen = [];
+            for (let m = 0; m < ZIEL_TAGE / 30; m++) {
+                zeilen.push(`  • Monat ${m + 1} (${addDaysFormatted(startISO, m * 30)}): ${(tag * 30).toFixed(2)} CHF`);
             }
-            einzahlungsListe = daten.join('\n');
+            einzahlungsListe = zeilen.join('\n');
         }
 
-        const p1_in = tag * 7;
-        const p1_out = p1_in * 0.5;
-
-        const p2_in = tag * 21;
-        const p2_out = p2_in * 0.5;
-
-        const p3_in = tag * 62;
-        const p3_out = p3_in * 0.5;
-
+        const p1_in = tag * 7,  p1_out = p1_in * 0.5;
+        const p2_in = tag * 21, p2_out = p2_in * 0.5;
+        const p3_in = tag * 62, p3_out = p3_in * 0.5;
         const p4_in = tag * 90;
         const gesperrteReste = p1_out + p2_out + p3_out;
         const zielAuszahlung = gesperrteReste + p4_in;
-        const totalGesamt = tag * 180;
+        const totalGesamt = tag * ZIEL_TAGE;
 
         const verfahrensText = `COMMITMENT-VEREINBARUNG ZUM NIKOTINAUSSTIEG
 
 1. BETEILIGTE PERSONEN
 Teilnehmer/in: Ich
 Vertrauensperson: ${c.personName}
-Startdatum: ${addDaysFormatted(startISO, 0)} | Endziel (180 Tage): ${addDaysFormatted(startISO, 180)}
+Startdatum: ${addDaysFormatted(startISO, 0)} | Endziel (${ZIEL_TAGE} Tage): ${addDaysFormatted(startISO, ZIEL_TAGE)}
 
-2. EINZAHLUNGSPLAN (${zyklus.toUpperCase()})
-Ich überweise / übergebe ${zyklus} den Betrag von ${zyklusBetrag.toFixed(2)} CHF an ${c.personName}:
+2. EINZAHLUNGSPLAN (${w.zyklus.toUpperCase()})
+Ich überweise / übergebe ${w.zyklus} den Betrag von ${w.zyklusBetrag.toFixed(2)} CHF an ${c.personName}:
 ${einzahlungsListe}
 
 3. AUSZAHLUNGSPLAN AN DEN CHECKPOINTS (50 % RÜCKZAHLUNG)
@@ -535,65 +733,67 @@ Bei erfolgreichem Erreichen der Meilensteine zahlt ${c.personName} folgende Betr
   Eingezahlt (Tag 8–28): ${p2_in.toFixed(2)} CHF ➔ Auszahlung: ${p2_out.toFixed(2)} CHF (Rest ${p2_out.toFixed(2)} CHF bleibt im Topf)
 - Checkpoint 3 – Monat 3 (${addDaysFormatted(startISO, 90)}):
   Eingezahlt (Tag 29–90): ${p3_in.toFixed(2)} CHF ➔ Auszahlung: ${p3_out.toFixed(2)} CHF (Rest ${p3_out.toFixed(2)} CHF bleibt im Topf)
-- Endziel – Monat 6 (${addDaysFormatted(startISO, 180)}):
+- Endziel – Monat 6 (${addDaysFormatted(startISO, ZIEL_TAGE)}):
   Eingezahlt (Tag 91–180): ${p4_in.toFixed(2)} CHF + gesperrte Reste (${gesperrteReste.toFixed(2)} CHF)
   ➔ Schlussauszahlung: ${zielAuszahlung.toFixed(2)} CHF
   (Gesamtrückzahlung bei Erfolg: ${totalGesamt.toFixed(2)} CHF = 100 %)
 
-4. REGELUNG BEI AUSRUTSCHERN
+4. REGEL BEI AUSRUTSCHERN
 Bei einem Ausrutscher verfällt kein Geld. Das eingezahlte Guthaben bleibt sicher verwahrt. Lediglich die Zeitfrist für den laufenden Checkpoint startet neu.
+
+5. HINWEIS
+Dies ist eine private, freiwillige Absprache zwischen uns beiden und kein rechtlich bindender Vertrag.
 
 Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
 
         commitmentModalContent.innerHTML = `
             <h3>📄 Dein Commitment-Vertrag & Zahlungsplan</h3>
-            
-            <textarea id="vertragText" rows="14" readonly style="font-family: monospace; font-size: 11px; background: #f9f9f9; padding: 10px; width: 100%; box-sizing: border-box; line-height: 1.4;">${verfahrensText}</textarea>
+            <textarea id="vertragText" rows="14" readonly style="font-family: monospace; font-size: 11px; background: #f9f9f9; padding: 10px; width: 100%; box-sizing: border-box; line-height: 1.4;">${escapeHtml(verfahrensText)}</textarea>
 
             <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Vertrag & Zahlungsplan kopieren</button>
             <button id="btnDeactivateCommitment" class="btn-danger" style="margin-top: 8px;">Vertrag auflösen</button>
             <button type="button" id="btnCloseCommitmentView" class="btn-secondary" style="margin-top: 8px;">Schliessen</button>
         `;
 
-        document.getElementById('btnCopyVertrag').addEventListener('click', () => {
-            const copyText = document.getElementById('vertragText');
-            copyText.select();
-            navigator.clipboard.writeText(copyText.value);
-            alert('Vertrag inklusive kompletter Zahlungsliste kopiert! Du kannst ihn jetzt direkt versenden.');
+        $('btnCopyVertrag').addEventListener('click', async () => {
+            const textarea = $('vertragText');
+            textarea.select();
+            try {
+                await navigator.clipboard.writeText(textarea.value);
+                alert('Vertrag inklusive kompletter Zahlungsliste kopiert! Du kannst ihn jetzt direkt versenden.');
+            } catch (err) {
+                document.execCommand('copy');
+                alert('Text markiert – falls er nicht kopiert wurde, halte ihn gedrückt und wähle „Kopieren“.');
+            }
         });
 
-        document.getElementById('btnDeactivateCommitment').addEventListener('click', () => {
+        $('btnDeactivateCommitment').addEventListener('click', () => {
             if (confirm('Möchtest du den Commitment-Vertrag wirklich auflösen?')) {
                 data.commitment = null;
-                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
-                commitmentOverlay.style.display = 'none';
+                saveData(data);
+                closeOverlay(commitmentOverlay);
                 showDashboard(data);
             }
         });
 
-        document.getElementById('btnCloseCommitmentView').addEventListener('click', () => {
-            commitmentOverlay.style.display = 'none';
-        });
+        $('btnCloseCommitmentView').addEventListener('click', () => closeOverlay(commitmentOverlay));
     }
 
-    // ACT-LEKTIONEN LOGIK
+    // ───────────────────────── ACT-Lektionen ─────────────────────────
     function starteActModus(data) {
         actOverlay.style.display = 'flex';
         renderActOverview(data);
     }
 
     function renderActOverview(data) {
-        if (!data.actCompleted) data.actCompleted = [];
-
         const lektionenHTML = actLektionenData.map(l => {
-            const isCompleted = data.actCompleted.includes(l.id);
-            const statusBadge = isCompleted 
-                ? '<span class="act-status" style="color: #2e7d32;">✅ Absolviert</span>' 
+            const done = data.actCompleted.includes(l.id);
+            const badge = done
+                ? '<span class="act-status" style="color: #2e7d32;">✅ Absolviert</span>'
                 : '<span class="act-status" style="color: #757575;">⏳ Offen</span>';
-
             return `
                 <div class="act-card" data-id="${l.id}">
-                    ${statusBadge}
+                    ${badge}
                     <div class="act-title">${escapeHtml(l.titel)}</div>
                     <div style="font-size: 13px; color: #555; margin-top: 4px;">Kategorie: ${escapeHtml(l.kategorie)}</div>
                 </div>
@@ -605,33 +805,25 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
             <p style="font-size: 14px; color: #555; margin-bottom: 15px;">
                 Lerne den Umgang mit Verlangen durch Akzeptanz & Achtsamkeit.
             </p>
-
             ${lektionenHTML}
-
             <button type="button" id="btnCloseAct" class="btn-secondary" style="margin-top: 10px;">Schliessen</button>
         `;
 
         document.querySelectorAll('.act-card').forEach(card => {
             card.addEventListener('click', () => {
-                const id = card.getAttribute('data-id');
-                const lektion = actLektionenData.find(l => l.id === id);
-                if (lektion) {
-                    renderActLesson(data, lektion);
-                }
+                const lektion = actLektionenData.find(l => l.id === card.getAttribute('data-id'));
+                if (lektion) renderActLesson(data, lektion);
             });
         });
-
-        document.getElementById('btnCloseAct').addEventListener('click', () => {
-            actOverlay.style.display = 'none';
-        });
+        $('btnCloseAct').addEventListener('click', () => closeOverlay(actOverlay));
     }
 
     function renderActLesson(data, lektion) {
-        const isCompleted = data.actCompleted.includes(lektion.id);
+        const done = data.actCompleted.includes(lektion.id);
 
         actModalContent.innerHTML = `
             <h3>${escapeHtml(lektion.titel)}</h3>
-            
+
             <div style="text-align: left; font-size: 14px; line-height: 1.5; margin: 15px 0;">
                 <p>${escapeHtml(lektion.inhalt)}</p>
                 <div style="background: #e1bee7; padding: 10px; border-radius: 6px; margin-top: 10px;">
@@ -640,32 +832,25 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
                 </div>
             </div>
 
-            ${!isCompleted ? `<button id="btnCompleteAct" style="background-color: #6a1b9a;">Lektion abschliessen</button>` : `<p style="color: #2e7d32; font-weight: bold;">✅ Diese Lektion hast du absolviert!</p>`}
-            
+            ${!done
+                ? '<button id="btnCompleteAct" style="background-color: #6a1b9a;">Lektion abschliessen</button>'
+                : '<p style="color: #2e7d32; font-weight: bold;">✅ Diese Lektion hast du absolviert!</p>'}
+
             <button type="button" id="btnBackToActList" class="btn-secondary">Zurück zur Übersicht</button>
         `;
 
-        if (!isCompleted) {
-            document.getElementById('btnCompleteAct')?.addEventListener('click', () => {
+        if (!done) {
+            $('btnCompleteAct').addEventListener('click', () => {
                 data.actCompleted.push(lektion.id);
-                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
+                saveData(data);
                 renderActLesson(data, lektion);
                 showDashboard(data);
             });
         }
-
-        document.getElementById('btnBackToActList').addEventListener('click', () => {
-            renderActOverview(data);
-        });
+        $('btnBackToActList').addEventListener('click', () => renderActOverview(data));
     }
 
-    if (btnCloseHelp) {
-        btnCloseHelp.addEventListener('click', () => {
-            helpOverlay.style.display = 'none';
-        });
-    }
-
-    // RÜCKFALL-MODUS LOGIK
+    // ───────────────────────── Rückfall-Modus ─────────────────────────
     function starteRueckfallModus(data, datumStr) {
         relapseOverlay.style.display = 'flex';
         relapseModalContent.innerHTML = `
@@ -680,97 +865,56 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
             <div class="form-group" style="text-align: left; margin-top: 15px;">
                 <label for="relapseTrigger">Was war der Auslöser?</label>
                 <select id="relapseTrigger">
-                    <option value="Stress / Ärger">Stress / Ärger</option>
-                    <option value="Kaffee / Mahlzeit">Kaffee / Mahlzeit</option>
-                    <option value="Geselligkeit / Alkohol">Geselligkeit / Alkohol</option>
-                    <option value="Langeweile / Wartezeit">Langeweile / Wartezeit</option>
-                    <option value="Gewohnheit / Ort">Gewohnheit / Ort</option>
-                    <option value="Spontaner Drang">Spontaner Drang</option>
+                    ${TRIGGER_KATEGORIEN.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('')}
                 </select>
             </div>
 
             <button id="btnFinishRelapse" style="background-color: #2e7d32; margin-top: 10px;">Ich mache sofort weiter!</button>
+            <button id="btnCancelRelapse" type="button" class="btn-secondary">Doch kein Ausrutscher</button>
         `;
 
-        document.getElementById('btnFinishRelapse').addEventListener('click', () => {
-            const ausloeser = document.getElementById('relapseTrigger').value;
-
-            data.triggers.push({
-                kategorie: `Ausrutscher: ${ausloeser}`,
-                notiz: 'Auslöser beim Ausrutscher erfasst.',
-                datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-            });
-
+        $('btnFinishRelapse').addEventListener('click', () => {
+            fuegeTriggerHinzu(data, `Ausrutscher: ${$('relapseTrigger').value}`, 'Auslöser beim Ausrutscher erfasst.');
+            closeOverlay(relapseOverlay);
             speichereCheckIn(data, datumStr, 'slip');
-            relapseOverlay.style.display = 'none';
         });
+        $('btnCancelRelapse').addEventListener('click', () => closeOverlay(relapseOverlay));
     }
 
-    if (triggerForm) {
-        triggerForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const savedData = localStorage.getItem('nikotinstopp_user_data');
-            if (savedData) {
-                const userData = JSON.parse(savedData);
-                if (!userData.triggers) userData.triggers = [];
-
-                const neuerTrigger = {
-                    kategorie: document.getElementById('triggerKategorie').value,
-                    notiz: document.getElementById('triggerNotiz').value,
-                    datum: new Date().toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-                };
-
-                userData.triggers.push(neuerTrigger);
-                localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
-                
-                triggerForm.reset();
-                triggerOverlay.style.display = 'none';
-                showDashboard(userData);
-            }
-        });
-    }
-
-    if (btnCancelTrigger) {
-        btnCancelTrigger.addEventListener('click', () => {
-            triggerOverlay.style.display = 'none';
-        });
-    }
-
-    function speichereCheckIn(data, datum, status) {
-        data.checkIns.push({ datum: datum, status: status, zeitstempel: new Date().toISOString() });
-        localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
-        showDashboard(data);
-    }
-
-    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS
+    // ───────────────────────── Craving-SOS ─────────────────────────
     function startSosFlow(userData) {
         sosOverlay.style.display = 'flex';
         renderSosStep1(userData);
     }
 
     function renderSosStep1(userData) {
-        const nikotinName = getNikotinName(userData.nikotinForm);
         sosModalContent.innerHTML = `
             <h3>1. Impuls benennen</h3>
             <p>Sprich es gedanklich aus:</p>
             <blockquote style="font-style: italic; background: #f0f0f0; padding: 10px; border-radius: 6px;">
-                "Ich spüre gerade den starken Drang zu ${nikotinName}."
+                "Ich spüre gerade den starken Drang zu ${getNikotinName(userData.nikotinForm)}."
             </blockquote>
             <p><strong>Körper-Check:</strong> Wo spürst du den Drang aktuell in deinem Körper? (z.B. Brust, Bauch, Hals). Beobachte das Gefühl einfach, ohne dagegen zu kämpfen.</p>
             <button id="sosNext1">Weiter: Die Welle beobachten</button>
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
+        $('sosNext1').addEventListener('click', () => renderSosStep2(userData));
+        $('sosCancel').addEventListener('click', closeSos);
+    }
 
-        document.getElementById('sosNext1').addEventListener('click', () => renderSosStep2(userData));
-        document.getElementById('sosCancel').addEventListener('click', closeSos);
+    async function haltBildschirmAn() {
+        try {
+            if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) { /* nicht kritisch */ }
     }
 
     function renderSosStep2(userData) {
-        let timeLeft = 600;
+        // Endzeit statt Herunterzählen: bleibt korrekt, auch wenn das Handy kurz gesperrt wird
+        const endZeit = Date.now() + SOS_DAUER_MS;
 
         sosModalContent.innerHTML = `
             <h3>2. Die Welle reiten & Ablenkung</h3>
-            <p style="font-size: 13px; margin: 4px 0;">Ein Craving baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab:</p>
+            <p style="font-size: 13px; margin: 4px 0;">Ein Craving baut sich oft schon nach wenigen Minuten, spätestens nach etwa <strong>20 Minuten</strong> von selbst ab:</p>
             <div id="timerDisplay" class="timer-display">10:00</div>
 
             <div style="text-align: left; background: #e8f5e9; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; color: #1b5e20;">
@@ -791,84 +935,57 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
 
-        const timerDisplay = document.getElementById('timerDisplay');
+        const timerDisplay = $('timerDisplay');
         if (timerInterval) clearInterval(timerInterval);
+        haltBildschirmAn();
 
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            const min = Math.floor(timeLeft / 60);
-            const sec = timeLeft % 60;
-            timerDisplay.textContent = `${min}:${sec < 10 ? '0' : ''}${sec}`;
-
-            if (timeLeft <= 0) {
+        function tick() {
+            const rest = Math.max(0, Math.ceil((endZeit - Date.now()) / 1000));
+            timerDisplay.textContent = `${Math.floor(rest / 60)}:${pad(rest % 60)}`;
+            if (rest <= 0) {
                 clearInterval(timerInterval);
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
                 renderSosStep3(userData);
             }
-        }, 1000);
+        }
+        tick();
+        timerInterval = setInterval(tick, 1000);
 
-        document.getElementById('sosNext2').addEventListener('click', () => {
+        $('sosNext2').addEventListener('click', () => {
             clearInterval(timerInterval);
             renderSosStep3(userData);
         });
-        document.getElementById('sosCancel').addEventListener('click', closeSos);
+        $('sosCancel').addEventListener('click', closeSos);
     }
 
     function renderSosStep3(userData) {
         sosModalContent.innerHTML = `
             <h3>3. Abschluss</h3>
             <p style="font-size: 16px; font-weight: bold; margin: 20px 0;">Wie ist es gelaufen?</p>
-            
             <button id="sosSuccess" style="background-color: #2e7d32; padding: 14px; font-size: 16px;">✅ Welle überstanden!</button>
             <button id="sosRelapse" class="btn-warning" style="margin-top: 12px; padding: 14px; font-size: 16px;">❌ Leider nachgegeben (Ausrutscher)</button>
         `;
 
-        document.getElementById('sosSuccess').addEventListener('click', () => {
+        $('sosSuccess').addEventListener('click', () => {
             userData.cravingsBewaeltigt = (userData.cravingsBewaeltigt || 0) + 1;
-            localStorage.setItem('nikotinstopp_user_data', JSON.stringify(userData));
+            saveData(userData);
             closeSos();
             showDashboard(userData);
         });
 
-        document.getElementById('sosRelapse').addEventListener('click', () => {
+        $('sosRelapse').addEventListener('click', () => {
             closeSos();
-            const heuteStr = new Date().toISOString().split('T')[0];
-            starteRueckfallModus(userData, heuteStr);
+            starteRueckfallModus(userData, heuteISO());
         });
     }
 
     function closeSos() {
         if (timerInterval) clearInterval(timerInterval);
-        sosOverlay.style.display = 'none';
+        if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+        closeOverlay(sosOverlay);
     }
 
-    function getPhaseInfo(tage) {
-        if (tage <= 3) {
-            return {
-                title: "Phase 1: Tag 1–3 (Akutphase)",
-                tip: "Entzugssymptome erreichen ihren Höhepunkt um Tag 3 und klingen danach stetig ab. Denke daran: Einzelne Cravings dauern meist nur 10 bis 20 Minuten."
-            };
-        } else if (tage <= 14) {
-            return {
-                title: "Phase 2: Woche 1–2 (Kritische Phase)",
-                tip: "Die meisten Rückfälle passieren in den ersten 14 Tagen. Halte durch! Der schwerste körperliche Teil ist fast geschafft."
-            };
-        } else if (tage <= 30) {
-            return {
-                title: "Phase 3: Monat 1 (Stabilisierung)",
-                tip: "Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab. Der körperliche Drang lässt nach, beobachte weiter deine Verhaltensauslöser."
-            };
-        } else {
-            return {
-                title: "Phase 4: Monat 2+ (Langzeit-Festigung)",
-                tip: "Starke Leistung! Bleibe wachsam bei spontanen Auslösern. Akzeptiere plötzliche Impulse als kurze Wellen, ohne sie zu bekämpfen."
-            };
-        }
-    }
-
-    function escapeHtml(str) {
-        return str.replace(/[&<>"']/g, (match) => {
-            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-            return map[match];
-        });
-    }
+    // ───────────────────────── Start ─────────────────────────
+    const gespeichert = loadData();
+    if (gespeichert) showDashboard(gespeichert);
 });
