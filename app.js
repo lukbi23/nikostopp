@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const commitmentModalContent = document.getElementById('commitmentModalContent');
 
     let timerInterval = null;
-    let justCheckedInClean = false; // Flag für die Erfolgs-Animation beim Check-in
+    let justCheckedInClean = false;
 
     const actLektionenData = [
         {
@@ -100,23 +100,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const heuteStr = heute.toISOString().split('T')[0];
 
         let daysHTML = '';
-        // Zeigt die ersten 14 Tage (kritische Phase) ab Stichtag oder die letzten 14 Tage
         const diffDays = Math.floor((heute.getTime() - stichtagDate.getTime()) / (1000 * 60 * 60 * 24));
         const startOffset = diffDays > 13 ? diffDays - 13 : 0;
 
         for (let i = 0; i < 14; i++) {
-            const dayNumber = startOffset + i + 1; // Tag 1, Tag 2, ...
+            const dayNumber = startOffset + i + 1;
             const currentDate = new Date(stichtagDate);
             currentDate.setDate(stichtagDate.getDate() + startOffset + i);
             const dateStr = currentDate.toISOString().split('T')[0];
 
-            // Phase bestimmen
             let phaseShort = 'P1';
             if (dayNumber > 30) phaseShort = 'P4';
             else if (dayNumber > 14) phaseShort = 'P3';
             else if (dayNumber > 3) phaseShort = 'P2';
 
-            // Check-in Status suchen
             const checkIn = data.checkIns.find(c => c.datum === dateStr);
             let statusClass = '';
             let icon = '·';
@@ -130,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     icon = '⚠️';
                 }
             } else if (currentDate < heute) {
-                // Vergangene Tage ohne Ausrutscher als rauchfrei werten
                 statusClass = 'clean';
                 icon = '✓';
             }
@@ -250,12 +246,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.commitment && data.commitment.active) {
             const c = data.commitment;
+            const zyklusText = c.zyklus === 'täglich' ? 'Tag' : (c.zyklus === 'wöchentlich' ? 'Woche' : 'Monat');
             commitmentButtonText = `🤝 Commitment-Vertrag (${escapeHtml(c.personName)})`;
             commitmentInfoHTML = `
                 <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; text-align: left;">
                     <strong>Vertrauensperson:</strong> ${escapeHtml(c.personName)}<br>
-                    <strong>Täglicher Einsatz:</strong> ${c.betrag.toFixed(2)} CHF / Tag (${(c.betrag * 7).toFixed(2)} CHF / Woche)<br>
-                    <strong>Rückzahlung an Checkpoints:</strong> ${c.prozent}%<br>
+                    <strong>Einzahlung:</strong> ${c.zyklusBetrag.toFixed(2)} CHF pro ${zyklusText} (Basis: ${c.tagesBetrag.toFixed(2)} CHF/Tag)<br>
+                    <strong>Rückzahlung an Checkpoints:</strong> 50 %<br>
                     <small>Regel A (Mild): Kein Geldverlust bei Ausrutschern.</small>
                 </div>
             `;
@@ -350,7 +347,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // COMMITMENT-MODUS LOGIK
+    // =========================================================
+    // COMMITMENT-MODUS LOGIK (ÜBERARBEITET)
+    // =========================================================
     function starteCommitmentModus(data) {
         commitmentOverlay.style.display = 'flex';
 
@@ -363,65 +362,105 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderCommitmentForm(data) {
         const tagesBetrag = data.tagesKosten ? data.tagesKosten : 8.00;
-        const wochenBetrag = (tagesBetrag * 7).toFixed(2);
-        const chk1Einzahlung = (tagesBetrag * 7).toFixed(2);
-        const chk1Rueck = (tagesBetrag * 7 * 0.5).toFixed(2);
 
         commitmentModalContent.innerHTML = `
-            <h3>🤝 Commitment-Vertrag (Einzahlungsvertrag)</h3>
+            <h3>🤝 Commitment-Modus</h3>
             
-            <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-                <strong>Warum macht das Sinn? (Wissenschaftlicher Hintergrund)</strong><br>
-                Reine Willenskraft ist oft die schwächste Strategie. Studien (u.a. New England Journal of Medicine & Cochrane) zeigen, dass Selbstverpflichtungen mit finanziellem Einsatz die Erfolgsquote <strong>mehr als verdoppeln</strong>. Die soziale Verbindlichkeit gegenüber einer Vertrauensperson schafft eine wirksame Hürde gegen spontane Cravings.
+            <!-- 1. Was ist der Commitment-Modus? -->
+            <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #fff8e1; border-left: 4px solid #ffa000; padding: 10px 12px; border-radius: 6px; margin-bottom: 10px;">
+                <strong>1. Was ist der Commitment-Modus?</strong><br>
+                Du schliesst eine freiwillige Vereinbarung mit einer Vertrauensperson ab: Statt dein Geld für Nikotin auszugeben, zahlst du den Betrag regelmässig an diese Person (z. B. auf ein separates Sparkonto). Bei erreichten Meilensteinen (Checkpoints) bekommst du dein Geld schrittweise zurück. Die App verwaltet kein Geld, sondern erstellt den Zahlungsplan und Vertrag.
+            </div>
+
+            <!-- 2. Wieso macht das Sinn? -->
+            <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #e3f2fd; border-left: 4px solid #1976d2; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px;">
+                <strong>2. Wieso macht das Sinn?</strong><br>
+                Reine Willenskraft ist laut Forschung die schwächste Strategie. Klinische Studien zeigen, dass finanzielle Selbstverpflichtungen die Erfolgsquote <strong>mehr als verdoppeln</strong>. Die soziale Verbindlichkeit gegenüber deiner Vertrauensperson hilft dir, akute Cravings auszusitzen.
             </div>
 
             <form id="commitmentForm" style="text-align: left;">
                 <div class="form-group">
                     <label for="comName">Name deiner Vertrauensperson:</label>
-                    <input type="text" id="comName" placeholder="z. B. Anna (Freundin, Partner, Kollege)" required>
+                    <input type="text" id="comName" placeholder="z. B. Anna (Partner/in, Freund/in)" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="comBetrag">Einsatzbetrag pro Tag (in CHF):</label>
-                    <input type="number" id="comBetrag" step="0.50" value="${tagesBetrag.toFixed(2)}" required>
+                    <label for="comBetrag">Täglicher Basis-Einsatz (in CHF):</label>
+                    <input type="number" id="comBetrag" step="0.50" min="0.50" value="${tagesBetrag.toFixed(2)}" required>
                     <small style="color: #666;">Basiert auf deinen bisherigen Tageskosten.</small>
                 </div>
 
-                <div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
-                    <strong>💡 Beispielrechnung & Zeiträume:</strong><br>
-                    - Täglicher Betrag: <span id="calcTag">${tagesBetrag.toFixed(2)}</span> CHF (${wochenBetrag} CHF / Woche)<br>
-                    - <strong>Checkpoint Woche 1 (Tag 7):</strong> ${chk1Einzahlung} CHF eingezahlt ➔ <strong>${chk1Rueck} CHF zurück</strong> (50%), der Rest bleibt bis zum Ziel gesperrt.<br>
-                    - <strong>Ziel nach 6 Monaten:</strong> 100% aller gesperrten Reste fliessen an dich zurück. Du verlierst bei Erfolg 0 CHF!
+                <!-- Dropdown für Einzahlungs-Zyklus -->
+                <div class="form-group">
+                    <label for="comZyklus">Einzahlungs-Zyklus:</label>
+                    <select id="comZyklus" required>
+                        <option value="täglich">Täglich (1× Tagesbetrag)</option>
+                        <option value="wöchentlich" selected>Wöchentlich (7× Tagesbetrag)</option>
+                        <option value="monatlich">Monatlich (30× Tagesbetrag)</option>
+                    </select>
                 </div>
 
-                <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
-                    <strong>🛡️ Regeln bei Ausrutschern (Variante A – Mild):</strong><br>
-                    - <strong>Kein Geldverlust:</strong> Bei einem Ausrutscher (z. B. an Tag 5) verfällt dein Geld nicht! Es bleibt sicher auf dem Sparkonto.<br>
-                    - <strong>Zeitlicher Reset:</strong> Lediglich die Zählung für den laufenden Checkpoint (z. B. Woche 1) startet von vorn. Das schützt dich vor dem "Jetzt ist auch egal"-Effekt.
+                <!-- Live-Vorschau der Rate -->
+                <div id="zyklusVorschau" style="background: #f1f8e9; border: 1px solid #c5e1a5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
+                    <!-- Wird dynamisch befüllt -->
                 </div>
 
-                <button type="submit" style="background-color: #f57c00;">Vertrag erstellen & aktivieren</button>
+                <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 12px; color: #555;">
+                    <strong>🛡️ Faire Ausrutscher-Regel (Variante A):</strong><br>
+                    Bei einem Ausrutscher verfällt kein Geld. Dein angespartes Guthaben bleibt sicher – lediglich die Frist für den aktuellen Checkpoint startet neu.
+                </div>
+
+                <button type="submit" style="background-color: #f57c00;">Vertrag & Zahlungsplan erstellen</button>
                 <button type="button" id="btnCloseCommitment" class="btn-secondary">Abbrechen</button>
             </form>
         `;
 
         const inputBetrag = document.getElementById('comBetrag');
-        if (inputBetrag) {
-            inputBetrag.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value) || 0;
-                document.getElementById('calcTag').textContent = val.toFixed(2);
-            });
+        const selectZyklus = document.getElementById('comZyklus');
+        const vorschauBox = document.getElementById('zyklusVorschau');
+
+        function updateVorschau() {
+            const tag = parseFloat(inputBetrag.value) || 0;
+            const zyklus = selectZyklus.value;
+            let faktor = 1;
+            let einheit = 'Tag';
+
+            if (zyklus === 'wöchentlich') {
+                faktor = 7;
+                einheit = 'Woche';
+            } else if (zyklus === 'monatlich') {
+                faktor = 30;
+                einheit = 'Monat (30 Tage)';
+            }
+
+            const rate = (tag * faktor).toFixed(2);
+            const gesamt180 = (tag * 180).toFixed(2);
+
+            vorschauBox.innerHTML = `
+                <strong>Deine Zahlungsrate:</strong> ${rate} CHF pro ${einheit}<br>
+                <strong>Gesamter Sparbetrag (180 Tage):</strong> ${gesamt180} CHF<br>
+                <small>Bei Erfolg am Zieltag (Monat 6) erhältst du 100 % (${gesamt180} CHF) zurück.</small>
+            `;
         }
+
+        updateVorschau();
+        inputBetrag.addEventListener('input', updateVorschau);
+        selectZyklus.addEventListener('change', updateVorschau);
 
         document.getElementById('commitmentForm').addEventListener('submit', (e) => {
             e.preventDefault();
 
+            const tagesWert = parseFloat(inputBetrag.value);
+            const gewaehlterZyklus = selectZyklus.value;
+            const faktor = gewaehlterZyklus === 'täglich' ? 1 : (gewaehlterZyklus === 'wöchentlich' ? 7 : 30);
+
             data.commitment = {
                 active: true,
                 personName: document.getElementById('comName').value,
-                betrag: parseFloat(document.getElementById('comBetrag').value),
-                prozent: 50,
-                startDatum: new Date().toLocaleDateString('de-CH')
+                tagesBetrag: tagesWert,
+                zyklus: gewaehlterZyklus,
+                zyklusBetrag: tagesWert * faktor,
+                startDatumISO: new Date().toISOString().split('T')[0]
             };
 
             localStorage.setItem('nikotinstopp_user_data', JSON.stringify(data));
@@ -434,37 +473,88 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Hilfsfunktion zum Formatieren von Kalenderdaten (Startdatum + X Tage)
+    function addDaysFormatted(startDateISO, daysToAdd) {
+        const d = new Date(startDateISO);
+        d.setDate(d.getDate() + daysToAdd);
+        return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
     function renderCommitmentVertragView(data) {
         const c = data.commitment;
-        const tag = c.betrag.toFixed(2);
-        const woche = (c.betrag * 7).toFixed(2);
+        const startISO = c.startDatumISO || new Date().toISOString().split('T')[0];
+        const tag = c.tagesBetrag;
 
-        const verfahrensText = `VEREINBARUNG ZUM NIKOTINAUSSTIEG (COMMITMENT-VERTRAG)
+        // 1. Einzahlungs-Liste generieren
+        let einzahlungsListe = '';
+        if (c.zyklus === 'täglich') {
+            einzahlungsListe = `- Täglich vom ${addDaysFormatted(startISO, 0)} bis ${addDaysFormatted(startISO, 180)}: je ${tag.toFixed(2)} CHF (180 Raten = ${(tag * 180).toFixed(2)} CHF)`;
+        } else if (c.zyklus === 'wöchentlich') {
+            const wochenRate = (tag * 7).toFixed(2);
+            const daten = [];
+            for (let w = 0; w < 26; w++) {
+                daten.push(`  • Woche ${w + 1} (${addDaysFormatted(startISO, w * 7)}): ${wochenRate} CHF`);
+            }
+            einzahlungsListe = daten.join('\n');
+        } else {
+            const monatsRate = (tag * 30).toFixed(2);
+            const daten = [];
+            for (let m = 0; m < 6; m++) {
+                daten.push(`  • Monat ${m + 1} (${addDaysFormatted(startISO, m * 30)}): ${monatsRate} CHF`);
+            }
+            einzahlungsListe = daten.join('\n');
+        }
 
-1. VERTRAGSPARTNER
-Diese Vereinbarung wird geschlossen zwischen mir und meiner Vertrauensperson ${c.personName}.
+        // 2. Exakte Checkpoint-Rechnung (Analog Abschnitt 7.2 des Briefings)
+        const p1_in = tag * 7;
+        const p1_out = p1_in * 0.5;
 
-2. EINSATZBETRAG & ANSPARUNG
-Ich überweise / übergebe ab dem ${c.startDatum} täglich ${tag} CHF (bzw. ${woche} CHF pro Woche) an ${c.personName}. Das Geld wird separat verwahrt.
+        const p2_in = tag * 21; // Tag 8 bis 28 (21 Tage)
+        const p2_out = p2_in * 0.5;
 
-3. CHECKPOINTS & RÜCKZAHLUNGEN
-Bei Erreichen folgender Meilensteine erhalte ich Teilauszahlungen (50% des jeweiligen Zeitraums):
-- Woche 1 (Tag 7): 50% Rückzahlung des Wochenbetrags.
-- Woche 4 (Tag 28): 50% Rückzahlung des Monatsbetrags.
-- Monat 3 (Tag 90): 50% Rückzahlung des Quartalsbetrags.
-- Endziel (Monat 6): Auszahlung ALLER verbliebenen gesperrten Reste (100% Gesamtrückzahlung).
+        const p3_in = tag * 62; // Tag 29 bis 90 (62 Tage)
+        const p3_out = p3_in * 0.5;
 
-4. REGELUNG BEI AUSRUTSCHERN (VARIANTE A - MILD)
-Bei einem Ausrutscher verfällt kein Geld. Das bisher eingezahlte Guthaben bleibt sicher im Topf. Lediglich die Zeitfrist des aktuellen Checkpoints startet neu.
+        const p4_in = tag * 90; // Tag 91 bis 180 (90 Tage)
+        const gesperrteReste = p1_out + p2_out + p3_out;
+        const zielAuszahlung = gesperrteReste + p4_in;
+        const totalGesamt = tag * 180;
 
-Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
+        const verfahrensText = `COMMITMENT-VEREINBARUNG ZUM NIKOTINAUSSTIEG
+
+1. BETEILIGTE PERSONEN
+Teilnehmer/in: Ich
+Vertrauensperson: ${c.personName}
+Startdatum: ${addDaysFormatted(startISO, 0)} | Endziel (180 Tage): ${addDaysFormatted(startISO, 180)}
+
+2. EINZAHLUNGSPLAN (${c.zyklus.toUpperCase()})
+Ich überweise / übergebe ${c.zyklus} den Betrag von ${c.zyklusBetrag.toFixed(2)} CHF an ${c.personName}:
+${einzahlungsListe}
+
+3. AUSZAHLUNGSPLAN AN DEN CHECKPOINTS (50 % RÜCKZAHLUNG)
+Bei erfolgreichem Erreichen der Meilensteine zahlt ${c.personName} folgende Beträge zurück:
+- Checkpoint 1 – Woche 1 (${addDaysFormatted(startISO, 7)}):
+  Eingezahlt: ${p1_in.toFixed(2)} CHF ➔ Auszahlung: ${p1_out.toFixed(2)} CHF (Rest ${p1_out.toFixed(2)} CHF bleibt im Topf)
+- Checkpoint 2 – Woche 4 (${addDaysFormatted(startISO, 28)}):
+  Eingezahlt (Tag 8–28): ${p2_in.toFixed(2)} CHF ➔ Auszahlung: ${p2_out.toFixed(2)} CHF (Rest ${p2_out.toFixed(2)} CHF bleibt im Topf)
+- Checkpoint 3 – Monat 3 (${addDaysFormatted(startISO, 90)}):
+  Eingezahlt (Tag 29–90): ${p3_in.toFixed(2)} CHF ➔ Auszahlung: ${p3_out.toFixed(2)} CHF (Rest ${p3_out.toFixed(2)} CHF bleibt im Topf)
+- Endziel – Monat 6 (${addDaysFormatted(startISO, 180)}):
+  Eingezahlt (Tag 91–180): ${p4_in.toFixed(2)} CHF + gesperrte Reste (${gesperrteReste.toFixed(2)} CHF)
+  ➔ Schlussauszahlung: ${zielAuszahlung.toFixed(2)} CHF
+  (Gesamtrückzahlung bei Erfolg: ${totalGesamt.toFixed(2)} CHF = 100 %)
+
+4. REGELUNG BEI AUSRUTSCHERN (VARIANTE A – MILD)
+Bei einem Ausrutscher verfällt kein Geld. Das eingezahlte Guthaben bleibt sicher verwahrt. Lediglich die Zeitfrist für den laufenden Checkpoint startet neu.
+
+Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
 
         commitmentModalContent.innerHTML = `
-            <h3>📄 Dein Commitment-Vertrag</h3>
+            <h3>📄 Dein Commitment-Vertrag & Zahlungsplan</h3>
             
-            <textarea id="vertragText" rows="12" readonly style="font-family: monospace; font-size: 12px; background: #f9f9f9; padding: 10px; width: 100%; box-sizing: border-box;">${verfahrensText}</textarea>
+            <textarea id="vertragText" rows="14" readonly style="font-family: monospace; font-size: 11px; background: #f9f9f9; padding: 10px; width: 100%; box-sizing: border-box; line-height: 1.4;">${verfahrensText}</textarea>
 
-            <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Text für WhatsApp / E-Mail kopieren</button>
+            <button id="btnCopyVertrag" style="background-color: #0288d1; margin-top: 10px;">📋 Vertrag & Zahlungsplan kopieren</button>
             <button id="btnDeactivateCommitment" class="btn-danger" style="margin-top: 8px;">Vertrag auflösen</button>
             <button type="button" id="btnCloseCommitmentView" class="btn-secondary" style="margin-top: 8px;">Schliessen</button>
         `;
@@ -473,7 +563,7 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
             const copyText = document.getElementById('vertragText');
             copyText.select();
             navigator.clipboard.writeText(copyText.value);
-            alert('Vertragstext kopiert! Du kannst ihn jetzt an deine Vertrauensperson senden.');
+            alert('Vertrag inklusive kompletter Zahlungsliste kopiert! Du kannst ihn jetzt direkt versenden.');
         });
 
         document.getElementById('btnDeactivateCommitment').addEventListener('click', () => {
@@ -656,7 +746,7 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         showDashboard(data);
     }
 
-    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS (Überarbeitet)
+    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS
     function startSosFlow(userData) {
         sosOverlay.style.display = 'flex';
         renderSosStep1(userData);
@@ -679,7 +769,6 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
-    // Schritt 2: Timer läuft UND Motivation + Ablenkungs-Tipps sind eingeblendet
     function renderSosStep2(userData) {
         let timeLeft = 600;
 
@@ -715,7 +804,6 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
             const sec = timeLeft % 60;
             timerDisplay.textContent = `${min}:${sec < 10 ? '0' : ''}${sec}`;
 
-            // Wenn Timer abgelaufen ist -> automatisch zur Entscheidung wechseln
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
                 renderSosStep3(userData);
@@ -729,7 +817,6 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
-    // Schritt 3: Reine Abschlussfrage ("Wie ist es gelaufen?")
     function renderSosStep3(userData) {
         sosModalContent.innerHTML = `
             <h3>3. Abschluss</h3>
