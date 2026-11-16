@@ -90,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'Unkonsumierte Einheiten';
     }
 
-    // Hilfsfunktion: 14-Tage Fortschritts-Kalender mit Phasen-Anzeige rendern
     function renderCalendarHTML(data) {
         const stichtagDate = new Date(data.stichtag);
         stichtagDate.setHours(0, 0, 0, 0);
@@ -155,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    // Hauptfunktion: Dashboard rendern
     function showDashboard(data) {
         onboardingCard.style.display = 'none';
         dashboardCard.style.display = 'block';
@@ -246,12 +244,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.commitment && data.commitment.active) {
             const c = data.commitment;
-            const zyklusText = c.zyklus === 'täglich' ? 'Tag' : (c.zyklus === 'wöchentlich' ? 'Woche' : 'Monat');
+            // Fallback für ältere gespeicherte Verträge (betrag -> tagesBetrag / zyklusBetrag)
+            const tagesWert = Number(c.tagesBetrag ?? c.betrag ?? data.tagesKosten ?? 0);
+            const zyklus = c.zyklus || 'täglich';
+            const faktor = zyklus === 'wöchentlich' ? 7 : (zyklus === 'monatlich' ? 30 : 1);
+            const zyklusWert = Number(c.zyklusBetrag ?? (tagesWert * faktor));
+            const zyklusText = zyklus === 'täglich' ? 'Tag' : (zyklus === 'wöchentlich' ? 'Woche' : 'Monat');
+
             commitmentButtonText = `🤝 Commitment-Vertrag (${escapeHtml(c.personName)})`;
             commitmentInfoHTML = `
                 <div style="background: #fff3e0; border-left: 4px solid #f57c00; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; text-align: left;">
                     <strong>Vertrauensperson:</strong> ${escapeHtml(c.personName)}<br>
-                    <strong>Einzahlung:</strong> ${c.zyklusBetrag.toFixed(2)} CHF pro ${zyklusText} (Basis: ${c.tagesBetrag.toFixed(2)} CHF/Tag)<br>
+                    <strong>Einzahlung:</strong> ${zyklusWert.toFixed(2)} CHF pro ${zyklusText} (Basis: ${tagesWert.toFixed(2)} CHF/Tag)<br>
                     <strong>Rückzahlung an Checkpoints:</strong> 50 %<br>
                     <small>Regel A (Mild): Kein Geldverlust bei Ausrutschern.</small>
                 </div>
@@ -347,9 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // =========================================================
-    // COMMITMENT-MODUS LOGIK (ÜBERARBEITET)
-    // =========================================================
     function starteCommitmentModus(data) {
         commitmentOverlay.style.display = 'flex';
 
@@ -366,13 +367,11 @@ document.addEventListener('DOMContentLoaded', () => {
         commitmentModalContent.innerHTML = `
             <h3>🤝 Commitment-Modus</h3>
             
-            <!-- 1. Was ist der Commitment-Modus? -->
             <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #fff8e1; border-left: 4px solid #ffa000; padding: 10px 12px; border-radius: 6px; margin-bottom: 10px;">
                 <strong>1. Was ist der Commitment-Modus?</strong><br>
                 Du schliesst eine freiwillige Vereinbarung mit einer Vertrauensperson ab: Statt dein Geld für Nikotin auszugeben, zahlst du den Betrag regelmässig an diese Person (z. B. auf ein separates Sparkonto). Bei erreichten Meilensteinen (Checkpoints) bekommst du dein Geld schrittweise zurück. Die App verwaltet kein Geld, sondern erstellt den Zahlungsplan und Vertrag.
             </div>
 
-            <!-- 2. Wieso macht das Sinn? -->
             <div style="text-align: left; font-size: 13px; line-height: 1.4; background: #e3f2fd; border-left: 4px solid #1976d2; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px;">
                 <strong>2. Wieso macht das Sinn?</strong><br>
                 Reine Willenskraft ist laut Forschung die schwächste Strategie. Klinische Studien zeigen, dass finanzielle Selbstverpflichtungen die Erfolgsquote <strong>mehr als verdoppeln</strong>. Die soziale Verbindlichkeit gegenüber deiner Vertrauensperson hilft dir, akute Cravings auszusitzen.
@@ -390,7 +389,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <small style="color: #666;">Basiert auf deinen bisherigen Tageskosten.</small>
                 </div>
 
-                <!-- Dropdown für Einzahlungs-Zyklus -->
                 <div class="form-group">
                     <label for="comZyklus">Einzahlungs-Zyklus:</label>
                     <select id="comZyklus" required>
@@ -400,13 +398,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </select>
                 </div>
 
-                <!-- Live-Vorschau der Rate -->
-                <div id="zyklusVorschau" style="background: #f1f8e9; border: 1px solid #c5e1a5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
-                    <!-- Wird dynamisch befüllt -->
-                </div>
+                <div id="zyklusVorschau" style="background: #f1f8e9; border: 1px solid #c5e1a5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;"></div>
 
                 <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 12px; color: #555;">
-                    <strong>🛡️ Faire Ausrutscher-Regel (Variante A):</strong><br>
+                    <strong>🛡️ Faire Ausrutscher-Regel:</strong><br>
                     Bei einem Ausrutscher verfällt kein Geld. Dein angespartes Guthaben bleibt sicher – lediglich die Frist für den aktuellen Checkpoint startet neu.
                 </div>
 
@@ -439,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
             vorschauBox.innerHTML = `
                 <strong>Deine Zahlungsrate:</strong> ${rate} CHF pro ${einheit}<br>
                 <strong>Gesamter Sparbetrag (180 Tage):</strong> ${gesamt180} CHF<br>
-                <small>Bei Erfolg am Zieltag (Monat 6) erhältst du 100 % (${gesamt180} CHF) zurück.</small>
+                <small>Bei Erfolg am Zieltag (Monat 6) erhältst du 100 % zurück.</small>
             `;
         }
 
@@ -473,7 +468,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Hilfsfunktion zum Formatieren von Kalenderdaten (Startdatum + X Tage)
     function addDaysFormatted(startDateISO, daysToAdd) {
         const d = new Date(startDateISO);
         d.setDate(d.getDate() + daysToAdd);
@@ -483,13 +477,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCommitmentVertragView(data) {
         const c = data.commitment;
         const startISO = c.startDatumISO || new Date().toISOString().split('T')[0];
-        const tag = c.tagesBetrag;
+        // Fallback auch hier für alte Verträge
+        const tag = Number(c.tagesBetrag ?? c.betrag ?? data.tagesKosten ?? 0);
+        const zyklus = c.zyklus || 'täglich';
+        const faktor = zyklus === 'wöchentlich' ? 7 : (zyklus === 'monatlich' ? 30 : 1);
+        const zyklusBetrag = Number(c.zyklusBetrag ?? (tag * faktor));
 
-        // 1. Einzahlungs-Liste generieren
         let einzahlungsListe = '';
-        if (c.zyklus === 'täglich') {
+        if (zyklus === 'täglich') {
             einzahlungsListe = `- Täglich vom ${addDaysFormatted(startISO, 0)} bis ${addDaysFormatted(startISO, 180)}: je ${tag.toFixed(2)} CHF (180 Raten = ${(tag * 180).toFixed(2)} CHF)`;
-        } else if (c.zyklus === 'wöchentlich') {
+        } else if (zyklus === 'wöchentlich') {
             const wochenRate = (tag * 7).toFixed(2);
             const daten = [];
             for (let w = 0; w < 26; w++) {
@@ -505,17 +502,16 @@ document.addEventListener('DOMContentLoaded', () => {
             einzahlungsListe = daten.join('\n');
         }
 
-        // 2. Exakte Checkpoint-Rechnung (Analog Abschnitt 7.2 des Briefings)
         const p1_in = tag * 7;
         const p1_out = p1_in * 0.5;
 
-        const p2_in = tag * 21; // Tag 8 bis 28 (21 Tage)
+        const p2_in = tag * 21;
         const p2_out = p2_in * 0.5;
 
-        const p3_in = tag * 62; // Tag 29 bis 90 (62 Tage)
+        const p3_in = tag * 62;
         const p3_out = p3_in * 0.5;
 
-        const p4_in = tag * 90; // Tag 91 bis 180 (90 Tage)
+        const p4_in = tag * 90;
         const gesperrteReste = p1_out + p2_out + p3_out;
         const zielAuszahlung = gesperrteReste + p4_in;
         const totalGesamt = tag * 180;
@@ -527,8 +523,8 @@ Teilnehmer/in: Ich
 Vertrauensperson: ${c.personName}
 Startdatum: ${addDaysFormatted(startISO, 0)} | Endziel (180 Tage): ${addDaysFormatted(startISO, 180)}
 
-2. EINZAHLUNGSPLAN (${c.zyklus.toUpperCase()})
-Ich überweise / übergebe ${c.zyklus} den Betrag von ${c.zyklusBetrag.toFixed(2)} CHF an ${c.personName}:
+2. EINZAHLUNGSPLAN (${zyklus.toUpperCase()})
+Ich überweise / übergebe ${zyklus} den Betrag von ${zyklusBetrag.toFixed(2)} CHF an ${c.personName}:
 ${einzahlungsListe}
 
 3. AUSZAHLUNGSPLAN AN DEN CHECKPOINTS (50 % RÜCKZAHLUNG)
@@ -544,7 +540,7 @@ Bei erfolgreichem Erreichen der Meilensteine zahlt ${c.personName} folgende Betr
   ➔ Schlussauszahlung: ${zielAuszahlung.toFixed(2)} CHF
   (Gesamtrückzahlung bei Erfolg: ${totalGesamt.toFixed(2)} CHF = 100 %)
 
-4. REGELUNG BEI AUSRUTSCHERN (VARIANTE A – MILD)
+4. REGELUNG BEI AUSRUTSCHERN
 Bei einem Ausrutscher verfällt kein Geld. Das eingezahlte Guthaben bleibt sicher verwahrt. Lediglich die Zeitfrist für den laufenden Checkpoint startet neu.
 
 Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
