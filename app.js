@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const commitmentModalContent = document.getElementById('commitmentModalContent');
 
     let timerInterval = null;
+    let justCheckedInClean = false; // Flag für die Erfolgs-Animation beim Check-in
 
     const actLektionenData = [
         {
@@ -89,6 +90,75 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'Unkonsumierte Einheiten';
     }
 
+    // Hilfsfunktion: 14-Tage Fortschritts-Kalender mit Phasen-Anzeige rendern
+    function renderCalendarHTML(data) {
+        const stichtagDate = new Date(data.stichtag);
+        stichtagDate.setHours(0, 0, 0, 0);
+
+        const heute = new Date();
+        heute.setHours(0, 0, 0, 0);
+        const heuteStr = heute.toISOString().split('T')[0];
+
+        let daysHTML = '';
+        // Zeigt die ersten 14 Tage (kritische Phase) ab Stichtag oder die letzten 14 Tage
+        const diffDays = Math.floor((heute.getTime() - stichtagDate.getTime()) / (1000 * 60 * 60 * 24));
+        const startOffset = diffDays > 13 ? diffDays - 13 : 0;
+
+        for (let i = 0; i < 14; i++) {
+            const dayNumber = startOffset + i + 1; // Tag 1, Tag 2, ...
+            const currentDate = new Date(stichtagDate);
+            currentDate.setDate(stichtagDate.getDate() + startOffset + i);
+            const dateStr = currentDate.toISOString().split('T')[0];
+
+            // Phase bestimmen
+            let phaseShort = 'P1';
+            if (dayNumber > 30) phaseShort = 'P4';
+            else if (dayNumber > 14) phaseShort = 'P3';
+            else if (dayNumber > 3) phaseShort = 'P2';
+
+            // Check-in Status suchen
+            const checkIn = data.checkIns.find(c => c.datum === dateStr);
+            let statusClass = '';
+            let icon = '·';
+
+            if (checkIn) {
+                if (checkIn.status === 'clean') {
+                    statusClass = 'clean';
+                    icon = '✅';
+                } else {
+                    statusClass = 'slip';
+                    icon = '⚠️';
+                }
+            } else if (currentDate < heute) {
+                // Vergangene Tage ohne Ausrutscher als rauchfrei werten
+                statusClass = 'clean';
+                icon = '✓';
+            }
+
+            const isTodayClass = (dateStr === heuteStr) ? 'today' : '';
+
+            daysHTML += `
+                <div class="cal-day ${statusClass} ${isTodayClass}" title="Tag ${dayNumber} (${dateStr})">
+                    <div>T${dayNumber}</div>
+                    <div style="font-size: 13px; margin: 2px 0;">${icon}</div>
+                    <span class="cal-phase-tag">${phaseShort}</span>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="calendar-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="font-size: 14px; color: #2c3e50;">🗓️ Dein 14-Tage-Verlauf & Phasen</strong>
+                    <small style="font-size: 11px; color: #666;">P1: Tag 1-3 | P2: W1-2</small>
+                </div>
+                <div class="calendar-grid">
+                    ${daysHTML}
+                </div>
+            </div>
+        `;
+    }
+
     // Hauptfunktion: Dashboard rendern
     function showDashboard(data) {
         onboardingCard.style.display = 'none';
@@ -128,16 +198,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `;
+        } else if (heuteCheckIn.status === 'clean') {
+            if (justCheckedInClean) {
+                justCheckedInClean = false;
+                checkInHTML = `
+                    <div class="celebrate-banner">
+                        <div style="font-size: 28px; margin-bottom: 4px;">🎉 🏆 ✨</div>
+                        <strong>Stark! Ein weiterer Tag frei geblieben!</strong><br>
+                        <small>Dein Fortschritt wurde im Kalender eingetragen.</small>
+                    </div>
+                `;
+            } else {
+                checkInHTML = `
+                    <div class="tip-box" style="margin-bottom: 20px; background: #e8f5e9; border-left-color: #2e7d32;">
+                        <strong>Tages-Check-in erledigt:</strong> ✅ Heute frei geblieben! Super gemacht.
+                    </div>
+                `;
+            }
         } else {
-            const statusText = heuteCheckIn.status === 'clean' 
-                ? '✅ Heute frei geblieben! Super gemacht.' 
-                : '⚠️ Ausrutscher verbucht. Schwamm drüber – direkt weitermachen!';
             checkInHTML = `
-                <div class="tip-box" style="margin-bottom: 20px; background: #e8f5e9; border-left-color: #2e7d32;">
-                    <strong>Tages-Check-in erledigt:</strong> ${statusText}
+                <div class="tip-box" style="margin-bottom: 20px; background: #fff3e0; border-left-color: #f57c00;">
+                    <strong>Tages-Check-in erledigt:</strong> ⚠️ Ausrutscher verbucht. Schwamm drüber – direkt weitermachen!
                 </div>
             `;
         }
+
+        const calendarHTML = renderCalendarHTML(data);
 
         let triggersHTML = '';
         if (data.triggers.length === 0) {
@@ -177,6 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         dashboardCard.innerHTML = `
             ${checkInHTML}
+
+            ${calendarHTML}
 
             <button id="sosBtn" class="btn-sos">⚡ Craving SOS – Ich habe Drang!</button>
 
@@ -229,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!heuteCheckIn) {
             document.getElementById('btnCheckinClean')?.addEventListener('click', () => {
+                justCheckedInClean = true;
                 speichereCheckIn(data, heuteStr, 'clean');
             });
             document.getElementById('btnCheckinSlip')?.addEventListener('click', () => {
@@ -316,7 +405,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </form>
         `;
 
-        // Live-Update der Beispielrechnung bei Betragsänderung
         const inputBetrag = document.getElementById('comBetrag');
         if (inputBetrag) {
             inputBetrag.addEventListener('input', (e) => {
@@ -366,7 +454,7 @@ Bei Erreichen folgender Meilensteine erhalte ich Teilauszahlungen (50% des jewei
 - Monat 3 (Tag 90): 50% Rückzahlung des Quartalsbetrags.
 - Endziel (Monat 6): Auszahlung ALLER verbliebenen gesperrten Reste (100% Gesamtrückzahlung).
 
-4. REGELUNG BEI AUSRUTSCHERN
+4. REGELUNG BEI AUSRUTSCHERN (VARIANTE A - MILD)
 Bei einem Ausrutscher verfällt kein Geld. Das bisher eingezahlte Guthaben bleibt sicher im Topf. Lediglich die Zeitfrist des aktuellen Checkpoints startet neu.
 
 Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
@@ -568,7 +656,7 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         showDashboard(data);
     }
 
-    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS
+    // CRAVING-SOS SCHRITT-FÜR-SCHRITT PROZESS (Überarbeitet)
     function startSosFlow(userData) {
         sosOverlay.style.display = 'flex';
         renderSosStep1(userData);
@@ -591,14 +679,29 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
+    // Schritt 2: Timer läuft UND Motivation + Ablenkungs-Tipps sind eingeblendet
     function renderSosStep2(userData) {
         let timeLeft = 600;
 
         sosModalContent.innerHTML = `
-            <h3>2. Die Welle reiten & 10-Min-Timer</h3>
-            <p>Ein Craving ist wie eine Welle: Es steigt an, erreicht einen Gipfel und baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab.</p>
+            <h3>2. Die Welle reiten & Ablenkung</h3>
+            <p style="font-size: 13px; margin: 4px 0;">Ein Craving baut sich nach <strong>10 bis 20 Minuten</strong> von selbst ab:</p>
             <div id="timerDisplay" class="timer-display">10:00</div>
-            <p><small>Atme tief ein und aus. Du musst nichts tun, nur abwarten.</small></p>
+
+            <div style="text-align: left; background: #e8f5e9; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; color: #1b5e20;">
+                <strong>Dein „Warum“:</strong><br>
+                <em>"${escapeHtml(userData.gruende)}"</em>
+            </div>
+
+            <div style="text-align: left; background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
+                <strong>Schnelle Ablenkung:</strong>
+                <ul style="margin: 5px 0 0 18px; padding: 0;">
+                    <li>Trinke ein grosses Glas kaltes Wasser.</li>
+                    <li>Mache 10 Kniebeugen oder gehe an die frische Luft.</li>
+                    <li>Lenke deine Hände ab oder rufe jemanden an.</li>
+                </ul>
+            </div>
+
             <button id="sosNext2">Weiter zur Entscheidung</button>
             <button id="sosCancel" class="btn-secondary">Abbrechen</button>
         `;
@@ -612,9 +715,10 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
             const sec = timeLeft % 60;
             timerDisplay.textContent = `${min}:${sec < 10 ? '0' : ''}${sec}`;
 
+            // Wenn Timer abgelaufen ist -> automatisch zur Entscheidung wechseln
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                timerDisplay.textContent = "0:00";
+                renderSosStep3(userData);
             }
         }, 1000);
 
@@ -625,23 +729,14 @@ Wir sprechen uns regelmässig kurz über meinen Fortschritt.`;
         document.getElementById('sosCancel').addEventListener('click', closeSos);
     }
 
+    // Schritt 3: Reine Abschlussfrage ("Wie ist es gelaufen?")
     function renderSosStep3(userData) {
         sosModalContent.innerHTML = `
-            <h3>3. Motivation & Entscheidung</h3>
-            <p><strong>Erinnere dich an dein 'Warum':</strong></p>
-            <blockquote style="font-style: italic; background: #e8f5e9; padding: 10px; border-radius: 6px; color: #1b5e20;">
-                "${escapeHtml(userData.gruende)}"
-            </blockquote>
-            <p><strong>Schnelle Ablenkungs-Tipps:</strong></p>
-            <ul style="text-align: left; font-size: 14px;">
-                <li>Trinke ein grosses Glas kaltes Wasser.</li>
-                <li>Mache 10 schnelle Kniebeugen oder gehe kurz an die frische Luft.</li>
-                <li>Rufe eine Person an oder lenke deine Hände ab.</li>
-            </ul>
+            <h3>3. Abschluss</h3>
+            <p style="font-size: 16px; font-weight: bold; margin: 20px 0;">Wie ist es gelaufen?</p>
             
-            <p style="margin-top: 15px; font-weight: bold;">Wie ist es gelaufen?</p>
-            <button id="sosSuccess" style="background-color: #2e7d32; margin-top: 5px;">✅ Welle überstanden!</button>
-            <button id="sosRelapse" class="btn-warning" style="margin-top: 8px;">❌ Leider nachgegeben (Ausrutscher)</button>
+            <button id="sosSuccess" style="background-color: #2e7d32; padding: 14px; font-size: 16px;">✅ Welle überstanden!</button>
+            <button id="sosRelapse" class="btn-warning" style="margin-top: 12px; padding: 14px; font-size: 16px;">❌ Leider nachgegeben (Ausrutscher)</button>
         `;
 
         document.getElementById('sosSuccess').addEventListener('click', () => {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nikotinstopp</title>
+    <title>NikoStopp</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚭</text></svg>">
     <meta name="theme-color" content="#2c3e50">
@@ -26,6 +26,13 @@
         }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .field-hint {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+            line-height: 1.3;
+        }
         input, select, textarea {
             width: 100%;
             padding: 10px;
@@ -94,6 +101,67 @@
             line-height: 1.4;
         }
 
+        /* Kalender & Fortschritts-Grid */
+        .calendar-section {
+            margin-bottom: 20px;
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .cal-day {
+            background: #eeeeee;
+            border-radius: 6px;
+            padding: 6px 2px;
+            text-align: center;
+            font-size: 11px;
+            color: #555;
+            border: 1px solid transparent;
+        }
+        .cal-day.clean {
+            background: #c8e6c9;
+            color: #1b5e20;
+            font-weight: bold;
+            border-color: #81c784;
+        }
+        .cal-day.slip {
+            background: #ffe0b2;
+            color: #e65100;
+            border-color: #ffb74d;
+        }
+        .cal-day.today {
+            border: 2px solid #2c3e50;
+        }
+        .cal-phase-tag {
+            font-size: 9px;
+            display: block;
+            margin-top: 2px;
+            opacity: 0.8;
+        }
+
+        /* Satisfying Check-in Animation */
+        @keyframes popSuccess {
+            0% { transform: scale(0.9); opacity: 0; }
+            50% { transform: scale(1.03); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .celebrate-banner {
+            animation: popSuccess 0.5s ease-out forwards;
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border: 2px solid #4caf50;
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #1b5e20;
+        }
+
         /* Craving-SOS Stile */
         .btn-sos {
             background-color: #d32f2f;
@@ -138,7 +206,7 @@
             font-size: 36px;
             font-weight: bold;
             color: #d32f2f;
-            margin: 15px 0;
+            margin: 10px 0;
         }
         .btn-secondary {
             background-color: #757575;
@@ -251,7 +319,7 @@
     </style>
 </head>
 <body>
-    <h1>Nikotinstopp</h1>
+    <h1>NikoStopp</h1>
 
     <!-- Onboarding-Ansicht -->
     <div class="card" id="onboardingCard">
@@ -279,11 +347,13 @@
             <div class="form-group">
                 <label for="stichtag">Dein Stichtag:</label>
                 <input type="date" id="stichtag" required>
+                <span class="field-hint">Wann willst du mit dem Aufhören beginnen? Ab diesem Datum zählt die App deine rauch- bzw. snusfreien Tage und Ersparnisse.</span>
             </div>
 
             <div class="form-group">
                 <label for="gruende">Deine Gründe für den Ausstieg:</label>
-                <textarea id="gruende" rows="3" placeholder="z. B. Gesundheit verbessern, Geld sparen..." required></textarea>
+                <textarea id="gruende" rows="4" placeholder="z. B. Ich möchte wieder freier atmen, morgens fitter aufwachen, nicht mehr abhängig sein und Geld für meine Ferien sparen..." required></textarea>
+                <span class="field-hint"><strong>Tipp:</strong> Schreibe deine Gründe möglichst ausführlich auf. In schwierigen Momenten greift die App genau auf diesen Text zurück, um dich an dein persönliches „Warum“ zu erinnern.</span>
             </div>
 
             <button type="submit">Ausstieg starten</button>

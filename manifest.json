@@ -1,6 +1,6 @@
 {
-  "name": "Nikotinstopp App",
-  "short_name": "Nikotinstopp",
+  "name": "NikoStopp",
+  "short_name": "NikoStopp",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
