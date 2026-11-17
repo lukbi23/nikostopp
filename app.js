@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const relapseModalContent = $('relapseModalContent');
     const helpOverlay = $('helpOverlay');
     const btnCloseHelp = $('btnCloseHelp');
+    const legalOverlay = $('legalOverlay');
+    const btnCloseLegal = $('btnCloseLegal');
+    const btnLegalOnboarding = $('btnLegalOnboarding');
     const actOverlay = $('actOverlay');
     const actModalContent = $('actModalContent');
     const commitmentOverlay = $('commitmentOverlay');
@@ -447,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="section-card">
                 <h3>Einstellungen & Hilfe</h3>
                 <button id="btnOpenHelp" class="btn-help" style="margin-top: 0;">📞 Beratung & Hilfsangebote</button>
+                <button id="btnOpenLegal" class="btn-secondary">⚖️ Impressum & Datenschutz</button>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button id="btnExport" class="btn-secondary" style="margin-top: 0; font-size: 14px;">💾 Backup speichern</button>
                     <button id="btnImport" class="btn-secondary" style="margin-top: 0; font-size: 14px;">📂 Backup laden</button>
@@ -465,6 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         $('btnOpenTrigger').addEventListener('click', () => { triggerOverlay.style.display = 'flex'; });
         $('btnOpenHelp').addEventListener('click', () => { helpOverlay.style.display = 'flex'; });
+        $('btnOpenLegal').addEventListener('click', () => { legalOverlay.style.display = 'flex'; });
         $('sosBtn').addEventListener('click', () => startSosFlow(data));
         $('btnExport').addEventListener('click', () => exportData(data));
         $('btnImport').addEventListener('click', () => importFile.click());
@@ -810,7 +815,12 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
         });
     }
 
-    // ───────────────────────── Trigger-Formular ─────────────────────────
+    // ───────────────────────── Modals schliessen / öffnen ─────────────────────────
+    if (btnCancelTrigger) btnCancelTrigger.addEventListener('click', () => closeOverlay(triggerOverlay));
+    if (btnCloseHelp) btnCloseHelp.addEventListener('click', () => closeOverlay(helpOverlay));
+    if (btnCloseLegal) btnCloseLegal.addEventListener('click', () => closeOverlay(legalOverlay));
+    if (btnLegalOnboarding) btnLegalOnboarding.addEventListener('click', () => { legalOverlay.style.display = 'flex'; });
+
     if (triggerForm) {
         triggerForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -823,8 +833,6 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
             showDashboard(userData);
         });
     }
-    if (btnCancelTrigger) btnCancelTrigger.addEventListener('click', () => closeOverlay(triggerOverlay));
-    if (btnCloseHelp) btnCloseHelp.addEventListener('click', () => closeOverlay(helpOverlay));
 
     // ───────────────────────── Backup ─────────────────────────
     function exportData(data) {

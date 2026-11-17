@@ -197,6 +197,20 @@
         }
         .btn-small-teal:hover { background-color: #99f6e4; }
 
+        .btn-link-subtle {
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px;
+            margin-top: 8px;
+            text-decoration: underline;
+        }
+        .btn-link-subtle:hover {
+            background: transparent;
+            color: var(--text-main);
+        }
+
         /* Craving-SOS Hero Button */
         .btn-sos {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -433,7 +447,7 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* Hilfe-Modal */
+        /* Hilfe- & Rechtliches-Modal */
         .help-box {
             background: #f8fafc;
             border-radius: 12px;
@@ -441,7 +455,7 @@
             margin: 10px 0;
             text-align: left;
             font-size: 14px;
-            line-height: 1.4;
+            line-height: 1.45;
         }
         .disclaimer-text {
             font-size: 12px;
@@ -565,6 +579,7 @@
 
             <button type="submit">Ausstieg starten</button>
             <button type="button" id="btnImportOnboarding" class="btn-secondary">📂 Backup laden (z. B. nach Neuinstallation)</button>
+            <button type="button" id="btnLegalOnboarding" class="btn-link-subtle">Impressum & Datenschutzerklärung</button>
         </form>
     </div>
 
@@ -678,6 +693,52 @@
             </div>
 
             <button type="button" id="btnCloseHelp" class="btn-secondary" style="margin-top: 15px;">Schliessen</button>
+        </div>
+    </div>
+
+    <!-- Impressum & Datenschutzerklärung Modal -->
+    <div id="legalOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>⚖️ Impressum & Datenschutz</h3>
+
+            <div class="help-box" style="border-left: 4px solid #1e293b;">
+                <strong>Impressum</strong>
+                <p style="margin: 6px 0 0 0;">
+                    Verantwortlich für diese Web-App:<br>
+                    <strong>Lukas Bischof</strong><br>
+                    Zürich, Schweiz<br>
+                    E-Mail: <a href="mailto:lukas.bischof2003@gmail.com" style="color: #0284c7;">lukas.bischof2003@gmail.com</a>
+                </p>
+                <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748b;">
+                    Privates, nicht-kommerzielles Bildungs- und Entwicklungsprojekt.
+                </p>
+            </div>
+
+            <div class="help-box" style="border-left: 4px solid #16a34a;">
+                <strong>Datenschutzerklärung (Schweizer DSG & DSGVO)</strong>
+                <p style="margin: 6px 0 0 0;">
+                    <strong>1. Lokale Datenspeicherung:</strong><br>
+                    Alle von dir eingegebenen Daten (Nikotinform, Konsummenge, Kosten, Stichtag, Motivation, Check-ins, Auslöser, ACT-Fortschritt und optionale Commitment-Angaben) werden <strong>ausschliesslich lokal im Speicher deines eigenen Browsers (localStorage)</strong> gespeichert.
+                </p>
+                <p style="margin: 8px 0 0 0;">
+                    <strong>2. Kein Server, kein Tracking, keine Weitergabe:</strong><br>
+                    Diese App besitzt kein Backend und keine Datenbank. Deine Angaben werden weder an den Betreiber noch an Dritte übertragen. Es werden keine Analyse-Tools, Werbe-Tracker oder Tracking-Cookies eingesetzt.
+                </p>
+                <p style="margin: 8px 0 0 0;">
+                    <strong>3. Hosting (GitHub Pages):</strong><br>
+                    Die statischen App-Dateien (HTML, CSS, JavaScript) werden über GitHub Pages (GitHub Inc.) bereitgestellt. Beim Aufruf der Seite verarbeitet der Hosting-Anbieter technisch notwendige Verbindungsdaten (z. B. IP-Adresse) zur Auslieferung der Webseite.
+                </p>
+                <p style="margin: 8px 0 0 0;">
+                    <strong>4. Deine Rechte (Export & Löschung):</strong><br>
+                    Du hast jederzeit die volle Kontrolle über deine Daten: Du kannst sie in der App als JSON-Datei exportieren oder über „Daten zurücksetzen“ vollständig und unwiderruflich von deinem Gerät löschen.
+                </p>
+            </div>
+
+            <div class="disclaimer-text">
+                <strong>Medizinischer Haftungsausschluss:</strong> NikoStopp ist ein Selbsthilfe-Werkzeug und keine medizinische Behandlung. Es ersetzt keine ärztliche, psychologische oder fachliche Beratung.
+            </div>
+
+            <button type="button" id="btnCloseLegal" class="btn-secondary" style="margin-top: 15px;">Schliessen</button>
         </div>
     </div>
 
