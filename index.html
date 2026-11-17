@@ -253,6 +253,47 @@
             line-height: 1.25;
         }
 
+        /* Ersparnis-Hochrechnung */
+        .projection-list {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            margin-top: 10px;
+        }
+        .projection-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #f8fafc;
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 11px 13px;
+        }
+        .projection-item.highlight {
+            background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+            border-color: #86efac;
+        }
+        .projection-left {
+            text-align: left;
+        }
+        .projection-period {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .projection-item-compare {
+            font-size: 12px;
+            color: #475569;
+            margin-top: 2px;
+        }
+        .projection-amount {
+            font-size: 15px;
+            font-weight: 800;
+            color: #15803d;
+            white-space: nowrap;
+        }
+
         /* Phasen & Hinweise */
         .phase-badge {
             display: inline-block;
@@ -281,48 +322,153 @@
             font-size: 14px;
         }
 
-        /* Kalender & Fortschritts-Grid */
+        /* Erweiterter 180-Tage-Kalender & Phasen */
+        .progress-bar-wrap {
+            background: #e2e8f0;
+            border-radius: 999px;
+            height: 10px;
+            overflow: hidden;
+            margin: 8px 0 4px 0;
+        }
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #22c55e, #15803d);
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.3s ease;
+        }
+        .phase-legend {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin: 12px 0;
+            font-size: 11px;
+        }
+        .legend-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 8px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            font-weight: 600;
+            color: #334155;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
         .calendar-section {
             background: #f8fafc;
             border: 1px solid var(--border-subtle);
             border-radius: 14px;
-            padding: 14px;
+            padding: 12px;
         }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            gap: 6px;
-            margin-top: 12px;
+            gap: 5px;
+            margin-top: 10px;
         }
         .cal-day {
-            background: #e2e8f0;
-            border-radius: 10px;
-            padding: 7px 2px;
+            position: relative;
+            border-radius: 9px;
+            padding: 6px 2px 5px 2px;
             text-align: center;
-            font-size: 11px;
-            font-weight: 600;
-            color: #475569;
+            font-size: 10px;
+            font-weight: 700;
             border: 1.5px solid transparent;
+            user-select: none;
+        }
+        /* Zukünftige Tage mit Phasen-Farbcodierung */
+        .cal-day.future.phase-1 {
+            background: #fff1f2;
+            border-color: #fecdd3;
+            color: #9f1239;
+        }
+        .cal-day.future.phase-2 {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
+        }
+        .cal-day.future.phase-3 {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1e40af;
+        }
+        .cal-day.future.phase-4 {
+            background: #f5f3ff;
+            border-color: #ddd6fe;
+            color: #5b21b6;
+        }
+        /* Vergangene Tage (klickbar) */
+        .cal-day.past {
+            cursor: pointer;
+        }
+        .cal-day.past:active {
+            transform: scale(0.95);
         }
         .cal-day.clean {
             background: #dcfce7;
             color: #166534;
-            border-color: #86efac;
+            border-color: #4ade80;
         }
         .cal-day.slip {
             background: #ffedd5;
             color: #9a3412;
-            border-color: #fdba74;
+            border-color: #fb923c;
         }
         .cal-day.today {
-            border: 2px solid #0f172a;
-            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+            border: 2px solid #0f172a !important;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
         }
-        .cal-phase-tag {
-            font-size: 9px;
-            display: block;
-            margin-top: 2px;
-            opacity: 0.75;
+        /* Unterer Farbbalken für die Phase */
+        .cal-phase-bar {
+            height: 3px;
+            width: 70%;
+            margin: 3px auto 0 auto;
+            border-radius: 2px;
+        }
+        .phase-1 .cal-phase-bar { background: #f43f5e; }
+        .phase-2 .cal-phase-bar { background: #f59e0b; }
+        .phase-3 .cal-phase-bar { background: #3b82f6; }
+        .phase-4 .cal-phase-bar { background: #8b5cf6; }
+
+        .cal-milestone-badge {
+            position: absolute;
+            top: -4px;
+            right: -3px;
+            font-size: 10px;
+            line-height: 1;
+        }
+
+        /* Meilenstein-Liste */
+        .milestone-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .milestone-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+            font-size: 13px;
+        }
+        .milestone-card.reached {
+            background: #f0fdf4;
+            border-color: #86efac;
+        }
+        .milestone-icon {
+            font-size: 18px;
+            line-height: 1.2;
         }
 
         /* Check-in Banner & Animation */
@@ -467,7 +613,7 @@
             padding-top: 10px;
         }
 
-        /* Untere Navigationsleiste (Instagram-Style 4 Tabs) */
+        /* Untere Navigationsleiste (4 Tabs) */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -659,6 +805,11 @@
     <!-- Rückfall-Modus Modal Container -->
     <div id="relapseOverlay" class="modal-overlay" style="display: none;">
         <div class="modal-content" id="relapseModalContent"></div>
+    </div>
+
+    <!-- Kalendertag bearbeiten Modal Container -->
+    <div id="dayEditOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content" id="dayEditModalContent"></div>
     </div>
 
     <!-- ACT-Lektionen Modal Container (Fallback) -->

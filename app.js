@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCancelTrigger = $('btnCancelTrigger');
     const relapseOverlay = $('relapseOverlay');
     const relapseModalContent = $('relapseModalContent');
+    const dayEditOverlay = $('dayEditOverlay');
+    const dayEditModalContent = $('dayEditModalContent');
     const helpOverlay = $('helpOverlay');
     const btnCloseHelp = $('btnCloseHelp');
     const legalOverlay = $('legalOverlay');
@@ -40,6 +42,45 @@ document.addEventListener('DOMContentLoaded', () => {
         'Langeweile / Wartezeit',
         'Gewohnheit / Ort',
         'Spontaner Drang'
+    ];
+
+    const KALENDER_MEILENSTEINE = [
+        {
+            tag: 3,
+            icon: '🔥',
+            titel: 'Tag 3: Körperlicher Höhepunkt geschafft',
+            text: 'Das Nikotin ist weitgehend abgebaut und die stärksten körperlichen Entzugssymptome lassen ab jetzt spürbar nach.'
+        },
+        {
+            tag: 7,
+            icon: '⭐',
+            titel: 'Tag 7: Erste volle Woche',
+            text: 'Du hast alle Wochentage und Wochenend-Routinen einmal ohne Nikotin gemeistert.'
+        },
+        {
+            tag: 14,
+            icon: '🛡️',
+            titel: 'Tag 14: Kritische Phase überwunden',
+            text: 'Die beiden rückfallkritischsten Wochen liegen hinter dir. Dein Alltag ohne Nikotin gewinnt an Stabilität.'
+        },
+        {
+            tag: 30,
+            icon: '🏅',
+            titel: 'Tag 30: Ein ganzer Monat frei',
+            text: 'Körperliche Entzugserscheinungen sind meist abgeklungen – ab jetzt festigst du deine neuen Gewohnheiten.'
+        },
+        {
+            tag: 90,
+            icon: '🚀',
+            titel: 'Tag 90: Drei Monate stark',
+            text: 'Dein Belohnungssystem im Gehirn hat sich weitgehend normalisiert. Spontane Impulse werden immer seltener.'
+        },
+        {
+            tag: 180,
+            icon: '🏆',
+            titel: 'Tag 180: 6-Monats-Ziel erreicht!',
+            text: 'Ein halbes Jahr frei! Du hast bewiesen, dass du langfristig unabhängig bleiben kannst.'
+        }
     ];
 
     const actLektionenData = [
@@ -95,6 +136,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function formatDatum(d) {
         return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
+    function formatDatumKurz(d) {
+        return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' });
+    }
     function addDaysFormatted(startISO, tage) {
         const d = parseISODate(startISO);
         d.setDate(d.getDate() + tage);
@@ -105,6 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return new Date(t.ts).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
         return t.datum || '';
+    }
+    function formatCHF(betrag) {
+        const num = Number(betrag) || 0;
+        return num.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function normalisiere(data) {
@@ -165,7 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon: 'icon-192.png'
             });
         } catch (err) {
-            // Fallback über Service Worker (wichtig für mobile Browser)
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.ready.then(reg => {
                     reg.showNotification(titel, { body: text, icon: 'icon-192.png' });
@@ -217,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ───────────────────────── Statistik ─────────────────────────
+    // ───────────────────────── Statistik & Hochrechnung ─────────────────────────
     function berechneStatistik(data) {
         const heute = new Date();
         heute.setHours(0, 0, 0, 0);
@@ -248,9 +295,63 @@ document.addEventListener('DOMContentLoaded', () => {
             serie,
             slipAnzahl: slipDaten.length,
             hatSlip: slipDaten.length > 0,
-            gespartesGeld: (freieTage * data.tagesKosten).toFixed(2),
+            gespartesGeld: formatCHF(freieTage * data.tagesKosten),
             eingesparteEinheiten: freieTage * data.tagesMenge
         };
+    }
+
+    function getKaufkraftVergleich(betrag) {
+        if (betrag <= 0) return 'Lege deine Tageskosten fest';
+        if (betrag < 25) return '☕ Kaffee & Gipfeli oder ein Snack';
+        if (betrag < 60) return '🍕 Ein feines Nachtessen oder Kinoabend';
+        if (betrag < 150) return '👟 Neue Sneakers oder ein Tagesausflug';
+        if (betrag < 350) return '🚂 Ein Wochenend-Trip in die Berge';
+        if (betrag < 700) return '🎧 Neue Kopfhörer oder ein Wellness-Wochenende';
+        if (betrag < 1500) return '🚲 Ein gutes Velo oder eine Städtereise';
+        if (betrag < 3500) return '🏖️ Zwei Wochen Ferien am Meer';
+        if (betrag < 8000) return '🌍 Eine grosse Traumreise oder ein E-Bike';
+        if (betrag < 20000) return '🚗 Ein guter Gebrauchtwagen oder Weltreise';
+        if (betrag < 40000) return '🚙 Ein Neuwagen oder ein Sabbatical';
+        return '🏡 Eigenkapital für ein Eigenheim / Altersvorsorge';
+    }
+
+    function renderErsparnisHochrechnungHTML(tagesKosten) {
+        const kosten = Number(tagesKosten) || 0;
+        const zeitraeume = [
+            { label: '1 Woche', tage: 7, highlight: false },
+            { label: '1 Monat (30 Tage)', tage: 30, highlight: false },
+            { label: '1 Jahr (365 Tage)', tage: 365, highlight: true },
+            { label: '10 Jahre', tage: 3650, highlight: true }
+        ];
+
+        const rowsHTML = zeitraeume.map(z => {
+            const summe = kosten * z.tage;
+            const vergleich = getKaufkraftVergleich(summe);
+            return `
+                <div class="projection-item ${z.highlight ? 'highlight' : ''}">
+                    <div class="projection-left">
+                        <div class="projection-period">${escapeHtml(z.label)}</div>
+                        <div class="projection-item-compare">${escapeHtml(vergleich)}</div>
+                    </div>
+                    <div class="projection-amount">${formatCHF(summe)} CHF</div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="section-card">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                    <h3 style="margin: 0;">💰 Deine Ersparnis-Hochrechnung</h3>
+                    <small style="font-size: 11px; color: #64748b;">Basis: ${formatCHF(kosten)} CHF/Tag</small>
+                </div>
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 8px 0;">
+                    So viel bleibt dir in Zukunft – und das liegt damit drin:
+                </p>
+                <div class="projection-list">
+                    ${rowsHTML}
+                </div>
+            </div>
+        `;
     }
 
     function getPhaseInfo(tage) {
@@ -267,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (tage <= 30) {
             return {
                 title: 'Phase 3: Monat 1 (Stabilisierung)',
-                tip: 'Körperliche Entzugssymptome klingen in 3 bis 4 Wochen meist weitgehend ab. Beobachte jetzt vor allem deine Verhaltensauslöser.'
+                tip: 'Körperliche Entzugssymptome klingen in 3 bis 4 Wochen weitgehend ab. Beobachte jetzt vor allem deine Verhaltensauslöser.'
             };
         }
         return {
@@ -276,60 +377,165 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // ───────────────────────── Kalender ─────────────────────────
-    function renderCalendarHTML(data) {
+    // ───────────────────────── Erweiterter 180-Tage-Kalender ─────────────────────────
+    function renderExtendedCalendarHTML(data, stats) {
         const start = parseISODate(data.stichtag);
         const heute = new Date();
         heute.setHours(0, 0, 0, 0);
         const heuteStr = toISODate(heute);
 
-        const diff = tageZwischen(heute, start);
-        const startOffset = diff > 13 ? diff - 13 : 0;
+        // Falls der Nutzer schon über 180 Tage hinaus ist, zeigen wir bis zum aktuellen Tag
+        const gesamtAnzeigeTage = Math.max(ZIEL_TAGE, stats.tageGesamt + 1);
+        const erreichteTage = Math.min(ZIEL_TAGE, stats.tageGesamt);
+        const prozent = Math.min(100, Math.round((erreichteTage / ZIEL_TAGE) * 100));
+        const verbleibendeTage = Math.max(0, ZIEL_TAGE - stats.tageGesamt);
+
+        const milestoneMap = new Map(KALENDER_MEILENSTEINE.map(m => [m.tag, m]));
 
         let daysHTML = '';
-        for (let i = 0; i < 14; i++) {
-            const dayNumber = startOffset + i + 1;
+        for (let i = 0; i < gesamtAnzeigeTage; i++) {
+            const dayNumber = i + 1;
             const currentDate = new Date(start);
-            currentDate.setDate(start.getDate() + startOffset + i);
+            currentDate.setDate(start.getDate() + i);
             const dateStr = toISODate(currentDate);
 
-            let phaseShort = 'P1';
-            if (dayNumber > 30) phaseShort = 'P4';
-            else if (dayNumber > 14) phaseShort = 'P3';
-            else if (dayNumber > 3) phaseShort = 'P2';
+            let phaseClass = 'phase-4';
+            if (dayNumber <= 3) phaseClass = 'phase-1';
+            else if (dayNumber <= 14) phaseClass = 'phase-2';
+            else if (dayNumber <= 30) phaseClass = 'phase-3';
 
             const checkIn = data.checkIns.find(c => c.datum === dateStr);
-            let statusClass = '';
-            let icon = '·';
+            const isToday = dateStr === heuteStr;
+            const isPastOrToday = dateStr <= heuteStr;
+            const milestone = milestoneMap.get(dayNumber);
+
+            let stateClass = isPastOrToday ? 'past' : 'future';
+            let statusIcon = '·';
 
             if (checkIn) {
-                statusClass = checkIn.status === 'clean' ? 'clean' : 'slip';
-                icon = checkIn.status === 'clean' ? '✅' : '⚠️';
+                if (checkIn.status === 'clean') {
+                    stateClass += ' clean';
+                    statusIcon = '✅';
+                } else {
+                    stateClass += ' slip';
+                    statusIcon = '⚠️';
+                }
             } else if (dateStr < heuteStr) {
-                statusClass = 'clean';
-                icon = '✓';
+                stateClass += ' clean';
+                statusIcon = '✓';
+            } else if (isToday) {
+                statusIcon = '⏳';
             }
 
-            const isToday = dateStr === heuteStr ? 'today' : '';
+            const milestoneBadge = milestone
+                ? `<span class="cal-milestone-badge" title="${escapeHtml(milestone.titel)}">${milestone.icon}</span>`
+                : '';
+
+            const clickableAttr = isPastOrToday ? `data-date="${dateStr}" data-daynum="${dayNumber}"` : '';
+            const titleText = `Tag ${dayNumber} (${formatDatum(currentDate)})${milestone ? ' – ' + milestone.titel : ''}${isPastOrToday ? ' • Tippen zum Bearbeiten' : ''}`;
 
             daysHTML += `
-                <div class="cal-day ${statusClass} ${isToday}" title="Tag ${dayNumber} (${dateStr})">
+                <div class="cal-day ${phaseClass} ${stateClass} ${isToday ? 'today' : ''}" ${clickableAttr} title="${escapeHtml(titleText)}">
+                    ${milestoneBadge}
                     <div>T${dayNumber}</div>
-                    <div style="font-size: 13px; margin: 2px 0;">${icon}</div>
-                    <span class="cal-phase-tag">${phaseShort}</span>
+                    <div style="font-size: 12px; margin: 1px 0;">${statusIcon}</div>
+                    <div class="cal-phase-bar"></div>
                 </div>
             `;
         }
 
+        const milestonesHTML = KALENDER_MEILENSTEINE.map(m => {
+            const erreicht = stats.tageGesamt >= m.tag;
+            const zieldatum = addDaysFormatted(data.stichtag, m.tag - 1);
+            return `
+                <div class="milestone-card ${erreicht ? 'reached' : ''}">
+                    <div class="milestone-icon">${erreicht ? '✅' : m.icon}</div>
+                    <div>
+                        <div style="font-weight: 700; color: #0f172a;">
+                            ${escapeHtml(m.titel)} <span style="font-weight: 500; color: #64748b;">(${zieldatum})</span>
+                        </div>
+                        <div style="color: #475569; margin-top: 2px; font-size: 12px;">${escapeHtml(m.text)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
         return `
+            <div style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: #0f172a;">
+                    <span>Geschafft: ${stats.tageGesamt} Tage</span>
+                    <span>${verbleibendeTage > 0 ? `Noch ${verbleibendeTage} Tage bis Ziel` : '6-Monats-Ziel erreicht! 🎉'}</span>
+                </div>
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width: ${prozent}%;"></div>
+                </div>
+            </div>
+
+            <div class="phase-legend">
+                <div class="legend-pill"><span class="legend-dot" style="background:#f43f5e;"></span>Phase 1: Tag 1–3</div>
+                <div class="legend-pill"><span class="legend-dot" style="background:#f59e0b;"></span>Phase 2: Tag 4–14</div>
+                <div class="legend-pill"><span class="legend-dot" style="background:#3b82f6;"></span>Phase 3: Tag 15–30</div>
+                <div class="legend-pill"><span class="legend-dot" style="background:#8b5cf6;"></span>Phase 4: Tag 31–180</div>
+            </div>
+
             <div class="calendar-section">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong style="font-size: 14px; color: #0f172a;">🗓️ Dein 14-Tage-Verlauf & Phasen</strong>
-                    <small style="font-size: 11px; color: #64748b;">P1: Tag 1-3 | P2: W1-2</small>
+                    <strong style="font-size: 13px; color: #0f172a;">🗓️ Gesamtübersicht (Tag 1–${gesamtAnzeigeTage})</strong>
+                    <small style="font-size: 11px; color: #64748b;">Tippe auf einen Tag zum Ändern</small>
                 </div>
-                <div class="calendar-grid">${daysHTML}</div>
+                <div class="calendar-grid" id="extendedCalendarGrid">${daysHTML}</div>
+            </div>
+
+            <h3 style="margin-top: 18px;">🏁 Phasen-Meilensteine</h3>
+            <div class="milestone-list">
+                ${milestonesHTML}
             </div>
         `;
+    }
+
+    function openDayEditModal(data, dateStr, dayNumber) {
+        const currentCheckIn = data.checkIns.find(c => c.datum === dateStr);
+        const currentStatus = currentCheckIn ? currentCheckIn.status : (dateStr < heuteISO() ? 'clean' : 'offen');
+        const datumAnzeige = formatDatum(parseISODate(dateStr));
+
+        dayEditOverlay.style.display = 'flex';
+        dayEditModalContent.innerHTML = `
+            <h3>📅 Tag ${dayNumber} (${datumAnzeige})</h3>
+            <p style="font-size: 13px; color: #64748b; margin-top: 0;">
+                Aktueller Status: <strong>${currentStatus === 'slip' ? '⚠️ Ausrutscher' : (currentStatus === 'clean' ? '✅ Frei geblieben' : '⏳ Noch offen')}</strong>
+            </p>
+
+            <button type="button" id="btnDaySetClean" class="btn-success" style="margin-top: 8px;">✅ Als frei geblieben markieren</button>
+
+            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid #e2e8f0; text-align: left;">
+                <label for="dayEditTrigger">Oder Ausrutscher nachtragen (Auslöser wählen):</label>
+                <select id="dayEditTrigger" style="margin-bottom: 10px;">
+                    ${TRIGGER_KATEGORIEN.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('')}
+                </select>
+                <button type="button" id="btnDaySetSlip" class="btn-warning">⚠️ Ausrutscher für diesen Tag eintragen</button>
+            </div>
+
+            <button type="button" id="btnDayEditCancel" class="btn-secondary">Schliessen</button>
+        `;
+
+        $('btnDaySetClean').addEventListener('click', () => {
+            closeOverlay(dayEditOverlay);
+            speichereCheckIn(data, dateStr, 'clean');
+        });
+
+        $('btnDaySetSlip').addEventListener('click', () => {
+            const ausloeser = $('dayEditTrigger').value;
+            data.triggers.push({
+                kategorie: `Ausrutscher: ${ausloeser}`,
+                notiz: `Nachträglich im Kalender eingetragen (Tag ${dayNumber}, ${datumAnzeige}).`,
+                ts: new Date().toISOString(),
+                datum: `${formatDatumKurz(parseISODate(dateStr))}`
+            });
+            closeOverlay(dayEditOverlay);
+            speichereCheckIn(data, dateStr, 'slip');
+        });
+
+        $('btnDayEditCancel').addEventListener('click', () => closeOverlay(dayEditOverlay));
     }
 
     // ───────────────────────── Dashboard & Tab-Views ─────────────────────────
@@ -505,6 +711,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${totalZeile ? `<p style="font-size: 12px; color: #64748b; text-align: center; margin: 4px 0 0 0;">${totalZeile}</p>` : ''}
             </div>
 
+            ${renderErsparnisHochrechnungHTML(data.tagesKosten)}
+
             <div class="section-card">
                 <div class="motivation-box">
                     <p style="margin: 0;"><strong>Deine Motivation:</strong> "${escapeHtml(data.gruende)}"</p>
@@ -588,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ── TAB 2: KALENDER MIT PHASENÜBERSICHT ──
+    // ── TAB 2: ERWEITERTER KALENDER MIT PHASENÜBERSICHT ──
     function renderKalenderTab(data, stats) {
         const phaseInfo = getPhaseInfo(stats.serie);
 
@@ -597,11 +805,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h2>Kalender & Phasenübersicht</h2>
                 <span class="phase-badge">${escapeHtml(phaseInfo.title)}</span>
                 <div class="tip-box" style="margin-bottom: 16px;">
-                    <strong>Gut zu wissen:</strong> ${escapeHtml(phaseInfo.tip)}
+                    <strong>Aktuelle Phase:</strong> ${escapeHtml(phaseInfo.tip)}
                 </div>
-                ${renderCalendarHTML(data)}
+                ${renderExtendedCalendarHTML(data, stats)}
             </div>
         `;
+
+        const calGrid = $('extendedCalendarGrid');
+        if (calGrid) {
+            calGrid.addEventListener('click', (e) => {
+                const dayEl = e.target.closest('.cal-day.past');
+                if (!dayEl) return;
+                const dateStr = dayEl.dataset.date;
+                const dayNumber = parseInt(dayEl.dataset.daynum, 10);
+                if (dateStr) openDayEditModal(data, dateStr, dayNumber);
+            });
+        }
     }
 
     // ── TAB 3: COMMITMENT-MODUS ──
