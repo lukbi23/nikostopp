@@ -117,6 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const m = String(data.commitment.startDatum || '').match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
             data.commitment.startDatumISO = m ? `${m[3]}-${pad(m[2])}-${pad(m[1])}` : data.stichtag;
         }
+        if (!data.reminder || typeof data.reminder !== 'object') {
+            data.reminder = { enabled: false, time: '19:00', lastNotifiedDate: '' };
+        }
         return data;
     }
 
@@ -152,6 +155,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function closeOverlay(el) { el.style.display = 'none'; }
+
+    // ───────────────────────── Erinnerungen (Notification API) ─────────────────────────
+    function sendeSystemMitteilung(titel, text) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        try {
+            new Notification(titel, {
+                body: text,
+                icon: 'icon-192.png'
+            });
+        } catch (err) {
+            // Fallback über Service Worker (wichtig für mobile Browser)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification(titel, { body: text, icon: 'icon-192.png' });
+                }).catch(() => {});
+            }
+        }
+    }
+
+    function pruefeTagesErinnerung(data) {
+        if (!data || !data.reminder || !data.reminder.enabled) return;
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+        const heuteStr = heuteISO();
+        if (data.reminder.lastNotifiedDate === heuteStr) return;
+
+        const heuteCheckIn = data.checkIns.find(c => c.datum === heuteStr);
+        if (heuteCheckIn) return;
+
+        const jetzt = new Date();
+        const [std, min] = String(data.reminder.time || '19:00').split(':').map(Number);
+        const zielZeit = new Date();
+        zielZeit.setHours(std || 19, min || 0, 0, 0);
+
+        if (jetzt >= zielZeit) {
+            data.reminder.lastNotifiedDate = heuteStr;
+            saveData(data);
+            sendeSystemMitteilung(
+                'NikoStopp – Tages-Check-in',
+                'Wie läuft dein Ausstieg heute? Trage kurz deinen Tages-Check-in ein.'
+            );
+        }
+    }
 
     // ───────────────────────── Tab-Navigation ─────────────────────────
     function switchTab(tabName) {
@@ -403,6 +449,33 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `Seit Stichtag: ${stats.tageGesamt} Tage · Ausrutscher: ${stats.slipAnzahl}`
             : '';
 
+        const reminderSupported = 'Notification' in window;
+        const reminderActive = data.reminder && data.reminder.enabled && reminderSupported && Notification.permission === 'granted';
+        const reminderHTML = reminderSupported ? `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 13px; border-radius: 12px; margin-bottom: 12px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div>
+                        <strong style="font-size: 14px; color: #0f172a;">🔔 Check-in-Erinnerung</strong>
+                        <div style="font-size: 12px; color: #64748b;">
+                            ${reminderActive ? `Aktiv (ab ${escapeHtml(data.reminder.time)} Uhr)` : 'Ausgeschaltet'}
+                        </div>
+                    </div>
+                    <button type="button" id="btnToggleReminder" style="width: auto; padding: 8px 14px; font-size: 13px; background-color: ${reminderActive ? '#e2e8f0' : '#16a34a'}; color: ${reminderActive ? '#334155' : '#ffffff'};">
+                        ${reminderActive ? 'Ausschalten' : 'Aktivieren'}
+                    </button>
+                </div>
+                ${reminderActive ? `
+                    <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                        <label for="reminderTime" style="margin: 0; font-size: 13px; white-space: nowrap;">Uhrzeit:</label>
+                        <input type="time" id="reminderTime" value="${escapeHtml(data.reminder.time || '19:00')}" style="padding: 6px 10px; font-size: 14px; width: auto;">
+                    </div>
+                ` : ''}
+                <p style="font-size: 11px; color: #64748b; margin: 8px 0 0 0; line-height: 1.35;">
+                    Hinweis: Da diese App ohne Server funktioniert, erscheinen Erinnerungen beim Öffnen oder im Hintergrund. Tipp für iPhone/Android: Stelle dir zusätzlich einen täglichen Handy-Wecker, falls du sicher gehen willst.
+                </p>
+            </div>
+        ` : '';
+
         dashboardCard.innerHTML = `
             ${zukunftHTML}
             ${checkInHTML}
@@ -449,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             <div class="section-card">
                 <h3>Einstellungen & Hilfe</h3>
+                ${reminderHTML}
                 <button id="btnOpenHelp" class="btn-help" style="margin-top: 0;">📞 Beratung & Hilfsangebote</button>
                 <button id="btnOpenLegal" class="btn-secondary">⚖️ Impressum & Datenschutz</button>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -465,6 +539,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 speichereCheckIn(data, heuteStr, 'clean');
             });
             $('btnCheckinSlip').addEventListener('click', () => starteRueckfallModus(data, heuteStr));
+        }
+
+        const btnToggleReminder = $('btnToggleReminder');
+        if (btnToggleReminder) {
+            btnToggleReminder.addEventListener('click', async () => {
+                if (reminderActive) {
+                    data.reminder.enabled = false;
+                    saveData(data);
+                    showDashboard(data);
+                    return;
+                }
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    data.reminder.enabled = true;
+                    saveData(data);
+                    sendeSystemMitteilung(
+                        'NikoStopp – Erinnerung aktiv',
+                        `Super! Du wirst ab ${data.reminder.time} Uhr an deinen Check-in erinnert, wenn du die App öffnest.`
+                    );
+                    showDashboard(data);
+                } else {
+                    alert('Benachrichtigungen wurden im Browser blockiert. Du kannst sie in deinen Browser- oder Geräteeinstellungen erlauben.');
+                }
+            });
+        }
+
+        const reminderTimeInput = $('reminderTime');
+        if (reminderTimeInput) {
+            reminderTimeInput.addEventListener('change', () => {
+                data.reminder.time = reminderTimeInput.value || '19:00';
+                saveData(data);
+                showDashboard(data);
+            });
         }
 
         $('btnOpenTrigger').addEventListener('click', () => { triggerOverlay.style.display = 'flex'; });
@@ -808,6 +915,7 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
                 triggers: [],
                 actCompleted: [],
                 commitment: null,
+                reminder: { enabled: false, time: '19:00', lastNotifiedDate: '' },
                 erstelltAm: new Date().toISOString()
             };
             saveData(userData);
@@ -1010,5 +1118,12 @@ Wir tauschen uns regelmässig kurz über meinen Stand aus.`;
 
     // ───────────────────────── Start ─────────────────────────
     const gespeichert = loadData();
-    if (gespeichert) showDashboard(gespeichert);
+    if (gespeichert) {
+        showDashboard(gespeichert);
+        pruefeTagesErinnerung(gespeichert);
+    }
+    setInterval(() => {
+        const aktuell = loadData();
+        if (aktuell) pruefeTagesErinnerung(aktuell);
+    }, 60000);
 });
